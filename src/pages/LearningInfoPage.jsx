@@ -1,8 +1,18 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { Brain, Eye, Mic, Volume2, BookOpen, Target, Award, Clock } from 'lucide-react';
 
 const LearningInfoPage = () => {
+  const navigate = useNavigate();
+  // Floating background icons
+  const floatingIcons = [
+    { Icon: Brain, delay: 0, color: 'text-blue-500' },
+    { Icon: Eye, delay: 0.5, color: 'text-green-500' },
+    { Icon: Mic, delay: 1, color: 'text-purple-500' },
+    { Icon: Volume2, delay: 1.5, color: 'text-orange-500' }
+  ];
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -91,12 +101,40 @@ const LearningInfoPage = () => {
   ];
 
   return (
-    <motion.div
-      className="max-w-6xl mx-auto py-4 px-4 min-h-screen flex flex-col justify-center"
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-    >
+    <div className="h-full flex items-center justify-center relative overflow-hidden">
+      {/* Floating background icons */}
+      {floatingIcons.map(({ Icon, delay, color }, index) => (
+        <motion.div
+          key={index}
+          className={`absolute ${color} opacity-10`}
+          initial={{ scale: 0, rotate: 0 }}
+          animate={{
+            scale: [1, 1.2, 1],
+            rotate: [0, 180, 360],
+            x: [0, 50, -50, 0],
+            y: [0, -30, 30, 0]
+          }}
+          transition={{
+            duration: 8,
+            delay,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          style={{
+            left: `${20 + index * 20}%`,
+            top: `${30 + index * 15}%`
+          }}
+        >
+          <Icon size={60} />
+        </motion.div>
+      ))}
+
+      <motion.div
+        className="max-w-6xl mx-auto py-4 px-4 min-h-screen flex flex-col justify-center z-10"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
       {/* Header */}
       <motion.div variants={itemVariants} className="text-center mb-6">
         <motion.div
@@ -200,18 +238,20 @@ const LearningInfoPage = () => {
         variants={itemVariants}
         className="text-center"
       >
-        <motion.div
-          className="inline-block bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-full font-semibold shadow-lg"
+        <motion.button
+          className="inline-block bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-full font-semibold shadow-lg cursor-pointer"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
+          onClick={() => navigate('/nama')}
         >
           Mari Mulakan! 🚀
-        </motion.div>
+        </motion.button>
         <p className="text-gray-500 mt-2 text-sm">
           Klik "Seterusnya" untuk memasukkan nama anda
         </p>
       </motion.div>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 };
 

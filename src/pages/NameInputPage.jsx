@@ -1,10 +1,18 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, CheckCircle, AlertCircle, Brain, Eye, Mic, Volume2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 
 const NameInputPage = () => {
+  // Floating background icons
+  const floatingIcons = [
+    { Icon: Brain, delay: 0, color: 'text-blue-500' },
+    { Icon: Eye, delay: 0.5, color: 'text-green-500' },
+    { Icon: Mic, delay: 1, color: 'text-purple-500' },
+    { Icon: Volume2, delay: 1.5, color: 'text-orange-500' }
+  ];
+
   const [name, setName] = useState('');
   const [isValid, setIsValid] = useState(false);
   const [showError, setShowError] = useState(false);
@@ -48,9 +56,36 @@ const NameInputPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
+      {/* Floating background icons */}
+      {floatingIcons.map(({ Icon, delay, color }, index) => (
+        <motion.div
+          key={index}
+          className={`absolute ${color} opacity-10`}
+          initial={{ scale: 0, rotate: 0 }}
+          animate={{
+            scale: [1, 1.2, 1],
+            rotate: [0, 180, 360],
+            x: [0, 50, -50, 0],
+            y: [0, -30, 30, 0]
+          }}
+          transition={{
+            duration: 8,
+            delay,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          style={{
+            left: `${20 + index * 20}%`,
+            top: `${30 + index * 15}%`
+          }}
+        >
+          <Icon size={60} />
+        </motion.div>
+      ))}
+
       <motion.div
-        className="max-w-md w-full mx-auto"
+        className="max-w-md w-full mx-auto z-10"
         variants={containerVariants}
         initial="hidden"
         animate="visible"

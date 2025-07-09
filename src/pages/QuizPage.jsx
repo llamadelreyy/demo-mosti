@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, CheckCircle, XCircle, Clock, ArrowLeft, ArrowRight, Award } from 'lucide-react';
+import { Brain, CheckCircle, XCircle, Clock, ArrowLeft, ArrowRight, Award, Eye, Mic, Volume2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 
 const QuizPage = () => {
+  // Floating background icons
+  const floatingIcons = [
+    { Icon: Brain, delay: 0, color: 'text-blue-500' },
+    { Icon: Eye, delay: 0.5, color: 'text-green-500' },
+    { Icon: Mic, delay: 1, color: 'text-purple-500' },
+    { Icon: Volume2, delay: 1.5, color: 'text-orange-500' }
+  ];
+
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes
   const [showTimer, setShowTimer] = useState(true);
   const { state, dispatch } = useApp();
@@ -13,7 +21,7 @@ const QuizPage = () => {
   const questions = [
     {
       id: 1,
-      question: "Apakah kepanjangan AI dalam konteks teknologi?",
+      question: "Apakah nama panjang AI dalam konteks teknologi?",
       options: [
         "Automated Intelligence",
         "Artificial Intelligence", 
@@ -195,7 +203,35 @@ const QuizPage = () => {
   const allQuestionsAnswered = getAnsweredCount() === questions.length;
 
   return (
-    <div className="max-w-4xl mx-auto p-2 h-full flex flex-col">
+    <div className="max-w-4xl mx-auto p-2 h-full flex flex-col relative overflow-hidden">
+      {/* Floating background icons */}
+      {floatingIcons.map(({ Icon, delay, color }, index) => (
+        <motion.div
+          key={index}
+          className={`absolute ${color} opacity-10`}
+          initial={{ scale: 0, rotate: 0 }}
+          animate={{
+            scale: [1, 1.2, 1],
+            rotate: [0, 180, 360],
+            x: [0, 50, -50, 0],
+            y: [0, -30, 30, 0]
+          }}
+          transition={{
+            duration: 8,
+            delay,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          style={{
+            left: `${20 + index * 20}%`,
+            top: `${30 + index * 15}%`
+          }}
+        >
+          <Icon size={60} />
+        </motion.div>
+      ))}
+
+      <div className="relative z-10 h-full flex flex-col">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -383,6 +419,7 @@ const QuizPage = () => {
           </motion.button>
         )}
       </motion.div>
+      </div>
     </div>
   );
 };

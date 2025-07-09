@@ -159,6 +159,7 @@ const VLMDemoPage = () => {
     "Adakah terdapat manusia dalam gambar ini?"
   ];
 
+
   const handleSuggestedQuestion = (question) => {
     setMessage(question);
     inputRef.current?.focus();
@@ -192,7 +193,7 @@ const VLMDemoPage = () => {
               </div>
             </div>
 
-            <div className="space-y-2 overflow-y-auto">
+            <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
               <motion.div
                 className="bg-green-50 rounded p-2"
                 whileHover={{ scale: 1.02 }}

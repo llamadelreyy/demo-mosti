@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Award, QrCode, Share2, Calendar, User } from 'lucide-react';
+import { Award, QrCode, Share2, Calendar, User, Brain, Eye, Mic, Volume2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import QRCode from 'qrcode';
 import jsPDF from 'jspdf';
@@ -19,6 +19,16 @@ const CertificatePage = () => {
     day: 'numeric'
   });
 
+  const floatingIcons = [
+    { Icon: Brain, delay: 0, x: "10%", y: "20%" },
+    { Icon: Eye, delay: 2, x: "80%", y: "15%" },
+    { Icon: Mic, delay: 4, x: "15%", y: "70%" },
+    { Icon: Volume2, delay: 6, x: "85%", y: "75%" },
+    { Icon: Brain, delay: 1, x: "70%", y: "40%" },
+    { Icon: Eye, delay: 3, x: "25%", y: "45%" },
+    { Icon: Mic, delay: 5, x: "60%", y: "80%" },
+    { Icon: Volume2, delay: 7, x: "40%", y: "25%" }
+  ];
 
   // Generate QR Code
   React.useEffect(() => {
@@ -101,8 +111,31 @@ const CertificatePage = () => {
   };
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="max-w-full mx-auto p-3 min-h-full">
+    <div className="h-full overflow-y-auto relative overflow-hidden">
+      {/* Floating Background Animation */}
+      {floatingIcons.map((item, index) => (
+        <motion.div
+          key={index}
+          className="absolute opacity-10 pointer-events-none"
+          style={{ left: item.x, top: item.y }}
+          animate={{
+            scale: [1, 1.2, 1],
+            rotate: [0, 180, 360],
+            x: [0, 30, 0],
+            y: [0, -20, 0],
+          }}
+          transition={{
+            duration: 8,
+            delay: item.delay,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        >
+          <item.Icon size={40} />
+        </motion.div>
+      ))}
+
+      <div className="max-w-full mx-auto p-3 min-h-full relative z-10">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -175,11 +208,11 @@ const CertificatePage = () => {
               </div>
               
               <p className="text-lg text-amber-800 mb-16">
-                telah berjaya menyelesaikan
+                telah diiktiraf sebagai
               </p>
               
               <h3 className="text-2xl font-bold text-amber-800 mb-16">
-                Demo Stack Model Kecerdasan Buatan (AI)
+                Certified Gen-AI Learner
               </h3>
               
               <p className="text-base text-amber-700 mb-20 leading-relaxed max-w-2xl mx-auto">

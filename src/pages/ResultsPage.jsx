@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Award, CheckCircle, XCircle, Target, TrendingUp, Star, Trophy } from 'lucide-react';
+import { Award, CheckCircle, XCircle, Target, TrendingUp, Star, Trophy, Brain, Eye, Mic, Volume2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -155,6 +155,17 @@ const ResultsPage = () => {
 
   const gradeInfo = getGrade();
 
+  const floatingIcons = [
+    { Icon: Brain, delay: 0, x: "10%", y: "20%" },
+    { Icon: Eye, delay: 2, x: "80%", y: "15%" },
+    { Icon: Mic, delay: 4, x: "15%", y: "70%" },
+    { Icon: Volume2, delay: 6, x: "85%", y: "75%" },
+    { Icon: Brain, delay: 1, x: "70%", y: "40%" },
+    { Icon: Eye, delay: 3, x: "25%", y: "45%" },
+    { Icon: Mic, delay: 5, x: "60%", y: "80%" },
+    { Icon: Volume2, delay: 7, x: "40%", y: "25%" }
+  ];
+
   const handleProceedToCertificate = () => {
     navigate('/sijil');
   };
@@ -179,9 +190,32 @@ const ResultsPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
+      {/* Floating Background Animation */}
+      {floatingIcons.map((item, index) => (
+        <motion.div
+          key={index}
+          className="absolute opacity-10 pointer-events-none"
+          style={{ left: item.x, top: item.y }}
+          animate={{
+            scale: [1, 1.2, 1],
+            rotate: [0, 180, 360],
+            x: [0, 30, 0],
+            y: [0, -20, 0],
+          }}
+          transition={{
+            duration: 8,
+            delay: item.delay,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        >
+          <item.Icon size={40} />
+        </motion.div>
+      ))}
+
       <motion.div
-        className="flex-1 max-w-4xl mx-auto p-3 overflow-y-auto"
+        className="flex-1 max-w-4xl mx-auto p-3 overflow-y-auto relative z-10"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
