@@ -1,5 +1,6 @@
 // API Service for AI Demo Backend Integration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8002';
+// Use relative URL for API calls - this will work through Vite proxy
+const API_BASE_URL = '';
 
 class APIService {
   constructor() {
@@ -32,7 +33,7 @@ class APIService {
 
   // LLM Chat API
   async chatWithLLM(message, conversationHistory = []) {
-    return this.request('/llm/chat', {
+    return this.request('/api/llm', {
       method: 'POST',
       body: JSON.stringify({
         message,
@@ -43,10 +44,10 @@ class APIService {
 
   // VLM (Vision Language Model) API
   async analyzeImage(imageBase64, prompt = "Describe this image in detail") {
-    return this.request('/vlm/analyze', {
+    return this.request('/api/vlm', {
       method: 'POST',
       body: JSON.stringify({
-        image: imageBase64,
+        image_base64: imageBase64,
         prompt,
       }),
     });
@@ -57,7 +58,7 @@ class APIService {
     const formData = new FormData();
     formData.append('audio', audioBlob, 'recording.wav');
     
-    return this.request('/whisper/transcribe', {
+    return this.request('/api/whisper', {
       method: 'POST',
       headers: {}, // Remove Content-Type to let browser set it for FormData
       body: formData,
@@ -66,7 +67,7 @@ class APIService {
 
   // TTS (Text-to-Speech) API
   async synthesizeSpeech(text, language = 'ms') {
-    const response = await fetch(`${this.baseURL}/tts/synthesize`, {
+    const response = await fetch(`${this.baseURL}/api/tts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

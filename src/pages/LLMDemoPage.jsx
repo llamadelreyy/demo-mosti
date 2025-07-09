@@ -146,11 +146,11 @@ const LLMDemoPage = () => {
         <motion.div
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
-          className="lg:col-span-2 flex flex-col"
+          className="lg:col-span-2 flex flex-col h-full"
         >
-          <div className="bg-white rounded shadow-sm flex flex-col flex-1">
+          <div className="bg-white rounded shadow-sm flex flex-col h-full">
             {/* Chat Header */}
-            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-1.5 rounded-t">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-1.5 rounded-t flex-shrink-0">
               <div className="flex items-center space-x-1">
                 <Bot size={12} />
                 <div>
@@ -163,7 +163,7 @@ const LLMDemoPage = () => {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0" style={{ maxHeight: '200px' }}>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0">
               {state.aiDemos.llm.chatHistory.length === 0 && (
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -242,33 +242,35 @@ const LLMDemoPage = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Form */}
-            <form onSubmit={handleSendMessage} className="p-1.5 border-t border-gray-200">
-              <div className="flex space-x-1">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Taip mesej anda di sini..."
-                  className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-blue-500 text-xs"
-                  disabled={state.aiDemos.llm.isLoading}
-                />
-                <motion.button
-                  type="submit"
-                  disabled={!message.trim() || state.aiDemos.llm.isLoading}
-                  className={`px-2 py-1 rounded transition-all text-xs ${
-                    message.trim() && !state.aiDemos.llm.isLoading
-                      ? 'bg-blue-500 text-white hover:bg-blue-600'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                  whileHover={message.trim() && !state.aiDemos.llm.isLoading ? { scale: 1.05 } : {}}
-                  whileTap={message.trim() && !state.aiDemos.llm.isLoading ? { scale: 0.95 } : {}}
-                >
-                  <Send size={12} />
-                </motion.button>
-              </div>
-            </form>
+            {/* Input Form - Fixed at bottom */}
+            <div className="flex-shrink-0 border-t border-gray-200">
+              <form onSubmit={handleSendMessage} className="p-1.5">
+                <div className="flex space-x-1">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="Taip mesej anda di sini..."
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-blue-500 text-xs"
+                    disabled={state.aiDemos.llm.isLoading}
+                  />
+                  <motion.button
+                    type="submit"
+                    disabled={!message.trim() || state.aiDemos.llm.isLoading}
+                    className={`px-2 py-1 rounded transition-all text-xs ${
+                      message.trim() && !state.aiDemos.llm.isLoading
+                        ? 'bg-blue-500 text-white hover:bg-blue-600'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                    whileHover={message.trim() && !state.aiDemos.llm.isLoading ? { scale: 1.05 } : {}}
+                    whileTap={message.trim() && !state.aiDemos.llm.isLoading ? { scale: 0.95 } : {}}
+                  >
+                    <Send size={12} />
+                  </motion.button>
+                </div>
+              </form>
+            </div>
           </div>
         </motion.div>
       </div>

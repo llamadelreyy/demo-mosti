@@ -257,8 +257,8 @@ echo "  Waiting for frontend to initialize..."
 sleep 5
 
 # Check if frontend is running
-if port_in_use 5173; then
-    echo "  ✅ Frontend server running on http://localhost:5173"
+if port_in_use 5174; then
+    echo "  ✅ Frontend server running on http://localhost:5174"
 else
     echo "  ❌ Frontend failed to start"
     cleanup
@@ -268,7 +268,7 @@ fi
 echo ""
 echo "🎉 All services started successfully!"
 echo ""
-echo "📱 Frontend: http://localhost:5173"
+echo "📱 Frontend: http://localhost:5174"
 echo "🔧 Backend API: http://localhost:8002"
 echo "📚 API Docs: http://localhost:8002/docs"
 echo ""

@@ -70,6 +70,18 @@ function appReducer(state, action) {
         },
       };
     
+    case 'ADD_VLM_MESSAGE':
+      return {
+        ...state,
+        aiDemos: {
+          ...state.aiDemos,
+          vlm: {
+            ...state.aiDemos.vlm,
+            results: [...state.aiDemos.vlm.results, action.payload],
+          },
+        },
+      };
+    
     case 'ADD_VLM_RESULT':
       return {
         ...state,

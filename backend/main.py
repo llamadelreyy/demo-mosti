@@ -302,19 +302,47 @@ async def health_check():
         "gpu_count": torch.cuda.device_count() if torch.cuda.is_available() else 0
     }
 
+def detect_language(text: str) -> str:
+    """Simple language detection based on common words"""
+    malay_words = ['saya', 'anda', 'adalah', 'dengan', 'untuk', 'dalam', 'pada', 'ini', 'itu', 'yang', 'dan', 'atau', 'tidak', 'ada', 'akan', 'sudah', 'boleh', 'mahu', 'hendak', 'bagaimana', 'mengapa', 'bila', 'dimana', 'siapa', 'apa']
+    english_words = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'up', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'among', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them', 'my', 'your', 'his', 'her', 'its', 'our', 'their', 'mine', 'yours', 'hers', 'ours', 'theirs', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'what', 'where', 'when', 'why', 'how', 'who', 'which', 'whose', 'whom']
+    
+    text_lower = text.lower()
+    words = text_lower.split()
+    
+    malay_count = sum(1 for word in words if word in malay_words)
+    english_count = sum(1 for word in words if word in english_words)
+    
+    if malay_count > english_count:
+        return "malay"
+    elif english_count > malay_count:
+        return "english"
+    else:
+        # Default to English if unclear
+        return "english"
+
 # LLM endpoint
 @app.post("/api/llm", response_model=LLMResponse)
 async def llm_chat(request: LLMRequest):
     """Chat with LLM using Ollama Llama3.2:1b on GPU 0"""
     try:
         with gpu_manager.get_gpu_0_lock():
+            # Detect input language
+            detected_lang = detect_language(request.message)
+            
+            # Prepare prompt based on detected language
+            if detected_lang == "malay":
+                prompt = f"Jawab dalam Bahasa Malaysia: {request.message}"
+            else:
+                prompt = f"Please respond in English: {request.message}"
+            
             # Use Ollama for LLM
             response = await asyncio.to_thread(
                 ollama.chat,
                 model="llama3.2:1b",
                 messages=[{
                     "role": "user",
-                    "content": f"Jawab dalam Bahasa Malaysia: {request.message}"
+                    "content": prompt
                 }]
             )
             
@@ -332,6 +360,15 @@ async def vlm_analyze(request: VLMRequest):
     """Analyze image with VLM using Ollama LLaVA on GPU 0"""
     try:
         with gpu_manager.get_gpu_0_lock():
+            # Detect input language
+            detected_lang = detect_language(request.prompt)
+            
+            # Prepare prompt based on detected language
+            if detected_lang == "malay":
+                prompt = f"Jawab dalam Bahasa Malaysia: {request.prompt}"
+            else:
+                prompt = f"Please respond in English: {request.prompt}"
+            
             # Decode base64 image
             image_data = base64.b64decode(request.image_base64.split(',')[1] if ',' in request.image_base64 else request.image_base64)
             
@@ -346,7 +383,7 @@ async def vlm_analyze(request: VLMRequest):
                     model="llava",
                     messages=[{
                         "role": "user",
-                        "content": f"Jawab dalam Bahasa Malaysia: {request.prompt}",
+                        "content": prompt,
                         "images": [tmp_file.name]
                     }]
                 )

@@ -1,33 +1,54 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, Eye, Upload, Send, Image as ImageIcon, Zap, Lightbulb, AlertCircle } from 'lucide-react';
+import { Camera, Eye, Upload, Send, User, Bot, Image as ImageIcon, Lightbulb, MessageSquare } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import apiService from '../services/api';
 
 const VLMDemoPage = () => {
+  const [message, setMessage] = useState('');
   const [capturedImage, setCapturedImage] = useState(null);
-  const [prompt, setPrompt] = useState('');
   const [isCapturing, setIsCapturing] = useState(false);
   const [cameraStream, setCameraStream] = useState(null);
   const [showCamera, setShowCamera] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const { state, dispatch } = useApp();
   
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [state.aiDemos.vlm.results]);
 
   const startCamera = async () => {
     try {
       setIsCapturing(true);
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        }
       });
       setCameraStream(stream);
       setShowCamera(true);
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      // Wait for next tick to ensure video element is rendered
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            console.log('Video metadata loaded:', videoRef.current.videoWidth, 'x', videoRef.current.videoHeight);
+          };
+        }
+      }, 100);
     } catch (error) {
       console.error('Error accessing camera:', error);
       alert('Tidak dapat mengakses kamera. Sila pastikan kebenaran diberikan.');
@@ -50,13 +71,22 @@ const VLMDemoPage = () => {
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
       
+      // Ensure video has loaded and has dimensions
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        console.error('Video not ready for capture');
+        return;
+      }
+      
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      context.drawImage(video, 0, 0);
+      context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
       
       const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      console.log('Captured image:', imageDataUrl.substring(0, 50) + '...');
       setCapturedImage(imageDataUrl);
       stopCamera();
+    } else {
+      console.error('Video or canvas ref not available');
     }
   }, [cameraStream]);
 
@@ -71,53 +101,71 @@ const VLMDemoPage = () => {
     }
   };
 
-  const handleAnalyzeImage = async () => {
-    if (!capturedImage || !prompt.trim()) return;
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if ((!message.trim() && !capturedImage) || state.aiDemos.vlm.isLoading) return;
 
+    const userMessage = {
+      id: Date.now(),
+      type: 'user',
+      content: message.trim() || 'Analisis imej ini',
+      image: capturedImage,
+      timestamp: new Date()
+    };
+
+    dispatch({ type: 'ADD_VLM_MESSAGE', payload: userMessage });
+    setMessage('');
+    const currentImage = capturedImage;
+    setCapturedImage(null);
+    setIsTyping(true);
     dispatch({ type: 'SET_VLM_LOADING', payload: true });
 
     try {
       // Convert image to base64 if needed
-      const imageBase64 = capturedImage.startsWith('data:')
-        ? capturedImage.split(',')[1]
-        : capturedImage;
+      const imageBase64 = currentImage.startsWith('data:')
+        ? currentImage.split(',')[1]
+        : currentImage;
 
-      // Call the real VLM API
-      const response = await apiService.analyzeImage(imageBase64, prompt.trim());
+      // Call the VLM API with corrected field name
+      const response = await apiService.analyzeImage(imageBase64, userMessage.content);
       
-      const result = {
-        image: capturedImage,
-        prompt: prompt.trim(),
-        response: response.analysis || response.description || response.response || 'Maaf, tidak dapat menganalisis imej pada masa ini.',
+      const botResponse = {
+        id: Date.now() + 1,
+        type: 'bot',
+        content: response.analysis || response.description || response.response || 'Maaf, tidak dapat menganalisis imej pada masa ini.',
         timestamp: new Date()
       };
 
-      dispatch({ type: 'ADD_VLM_RESULT', payload: { image: capturedImage, result }});
-      setPrompt('');
+      dispatch({ type: 'ADD_VLM_MESSAGE', payload: botResponse });
     } catch (error) {
       console.error('VLM API Error:', error);
-      const errorResult = {
-        image: capturedImage,
-        prompt: prompt.trim(),
-        response: 'Maaf, terdapat masalah dengan sambungan ke model penglihatan AI. Sila pastikan backend server berjalan dan cuba lagi.',
+      const errorMessage = {
+        id: Date.now() + 1,
+        type: 'bot',
+        content: 'Maaf, terdapat masalah dengan sambungan ke model penglihatan AI. Sila pastikan backend server berjalan dan cuba lagi.',
         timestamp: new Date()
       };
-      dispatch({ type: 'ADD_VLM_RESULT', payload: { image: capturedImage, result: errorResult }});
+      dispatch({ type: 'ADD_VLM_MESSAGE', payload: errorMessage });
     } finally {
+      setIsTyping(false);
       dispatch({ type: 'SET_VLM_LOADING', payload: false });
     }
   };
 
-  const suggestedPrompts = [
+  const suggestedQuestions = [
     "Apakah yang terdapat dalam imej ini?",
     "Terangkan objek utama dalam gambar",
     "Apakah warna dominan dalam imej?",
     "Adakah terdapat manusia dalam gambar ini?"
   ];
 
-  const resetCapture = () => {
+  const handleSuggestedQuestion = (question) => {
+    setMessage(question);
+    inputRef.current?.focus();
+  };
+
+  const removeImage = () => {
     setCapturedImage(null);
-    setPrompt('');
   };
 
   return (
@@ -163,75 +211,206 @@ const VLMDemoPage = () => {
                 whileHover={{ scale: 1.02 }}
               >
                 <div className="flex items-center space-x-1 mb-0.5">
-                  <Camera className="text-purple-600" size={10} />
-                  <h3 className="font-semibold text-purple-800 text-xs">Cara Guna</h3>
+                  <MessageSquare className="text-purple-600" size={10} />
+                  <h3 className="font-semibold text-purple-800 text-xs">Cuba Tanya</h3>
                 </div>
-                <ol className="text-purple-700 text-xs space-y-0.5">
-                  <li>1. Ambil gambar atau muat naik</li>
-                  <li>2. Tulis soalan tentang imej</li>
-                  <li>3. Klik analisis untuk jawapan</li>
-                </ol>
+                <div className="space-y-0.5">
+                  {suggestedQuestions.slice(0, 2).map((question, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleSuggestedQuestion(question)}
+                      className="w-full text-left text-xs bg-white border border-purple-200 rounded p-1 hover:bg-purple-100 transition-colors"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
               </motion.div>
             </div>
           </div>
         </motion.div>
 
-        {/* Main Interface */}
+        {/* Chat Interface */}
         <motion.div
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
-          className="lg:col-span-2 flex flex-col"
+          className="lg:col-span-2 flex flex-col h-full"
         >
-          <div className="bg-white rounded shadow-sm overflow-hidden flex flex-col flex-1">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-1.5">
+          <div className="bg-white rounded shadow-sm flex flex-col h-full">
+            {/* Chat Header */}
+            <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-1.5 rounded-t flex-shrink-0">
               <div className="flex items-center space-x-1">
                 <Eye size={12} />
                 <div>
-                  <h3 className="font-semibold text-xs">Analisis Imej AI</h3>
+                  <h3 className="font-semibold text-xs">AI Vision Assistant</h3>
                   <p className="text-green-100 text-xs">
-                    Ambil gambar, {state.user.name}!
+                    Hantar imej, {state.user.name}!
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="p-2 flex-1 flex flex-col min-h-0">
-              {/* Camera/Upload Section */}
-              {!capturedImage && !showCamera && (
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0">
+              {state.aiDemos.vlm.results.length === 0 && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="text-center py-3 flex-1 flex flex-col justify-center"
+                  className="text-center py-2"
                 >
-                  <ImageIcon className="mx-auto text-gray-400 mb-2" size={20} />
-                  <h3 className="text-xs font-semibold text-gray-800 mb-2">
-                    Pilih Cara Mendapatkan Imej
-                  </h3>
-                  
-                  <div className="flex flex-col sm:flex-row gap-1 justify-center">
-                    <motion.button
-                      onClick={startCamera}
-                      disabled={isCapturing}
-                      className="flex items-center space-x-1 px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors disabled:opacity-50 text-xs"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <Camera size={12} />
-                      <span>{isCapturing ? 'Membuka...' : 'Kamera'}</span>
-                    </motion.button>
-                    
-                    <motion.button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center space-x-1 px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-xs"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <Upload size={12} />
-                      <span>Muat Naik</span>
-                    </motion.button>
+                  <Eye className="mx-auto text-gray-400 mb-1" size={20} />
+                  <p className="text-gray-500 text-xs">
+                    Ambil gambar dan tanya AI tentang imej!
+                  </p>
+                </motion.div>
+              )}
+
+              <AnimatePresence>
+                {state.aiDemos.vlm.results.map((msg) => (
+                  <motion.div
+                    key={msg.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`flex items-start space-x-1 max-w-[80%] ${
+                      msg.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+                    }`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                        msg.type === 'user'
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        {msg.type === 'user' ? <User size={8} /> : <Bot size={8} />}
+                      </div>
+                      
+                      <div className={`rounded p-1.5 ${
+                        msg.type === 'user'
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {msg.type === 'user' && msg.image && (
+                          <img
+                            src={msg.image}
+                            alt="User uploaded"
+                            className="w-20 h-20 object-cover rounded mb-1"
+                          />
+                        )}
+                        <p className="text-xs">{msg.content}</p>
+                        <p className={`text-xs mt-0.5 ${
+                          msg.type === 'user' ? 'text-green-100' : 'text-gray-500'
+                        }`}>
+                          {msg.timestamp.toLocaleTimeString('ms-MY', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+
+              {/* Typing Indicator */}
+              {isTyping && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex justify-start"
+                >
+                  <div className="flex items-start space-x-1">
+                    <div className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center">
+                      <Bot size={8} className="text-gray-600" />
+                    </div>
+                    <div className="bg-gray-100 rounded p-1.5">
+                      <div className="flex space-x-0.5">
+                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" />
+                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                      </div>
+                    </div>
                   </div>
-                  
+                </motion.div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+
+            {/* Input Form - Fixed at bottom */}
+            <div className="flex-shrink-0 border-t border-gray-200">
+              {/* Image Preview in Input */}
+              {capturedImage && (
+                <div className="p-2 border-b border-gray-200">
+                  <div className="relative inline-block">
+                    <img 
+                      src={capturedImage} 
+                      alt="Preview" 
+                      className="w-16 h-16 object-cover rounded border"
+                    />
+                    <button
+                      onClick={removeImage}
+                      className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors text-xs"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={handleSendMessage} className="p-1.5">
+                <div className="flex space-x-1">
+                  {/* Camera Button */}
+                  <motion.button
+                    type="button"
+                    onClick={startCamera}
+                    disabled={isCapturing || showCamera}
+                    className="px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors disabled:opacity-50 text-xs"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Camera size={12} />
+                  </motion.button>
+
+                  {/* Upload Button */}
+                  <motion.button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-xs"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Upload size={12} />
+                  </motion.button>
+
+                  {/* Text Input */}
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder={capturedImage ? "Tanya tentang imej..." : "Ambil gambar dahulu..."}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-green-500 text-xs"
+                    disabled={state.aiDemos.vlm.isLoading}
+                  />
+
+                  {/* Send Button */}
+                  <motion.button
+                    type="submit"
+                    disabled={(!message.trim() && !capturedImage) || state.aiDemos.vlm.isLoading}
+                    className={`px-2 py-1 rounded transition-all text-xs ${
+                      (message.trim() || capturedImage) && !state.aiDemos.vlm.isLoading
+                        ? 'bg-green-500 text-white hover:bg-green-600'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                    whileHover={(message.trim() || capturedImage) && !state.aiDemos.vlm.isLoading ? { scale: 1.05 } : {}}
+                    whileTap={(message.trim() || capturedImage) && !state.aiDemos.vlm.isLoading ? { scale: 0.95 } : {}}
+                  >
+                    <Send size={12} />
+                  </motion.button>
+
+                  {/* Hidden file input */}
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -239,139 +418,8 @@ const VLMDemoPage = () => {
                     onChange={handleFileUpload}
                     className="hidden"
                   />
-                </motion.div>
-              )}
-
-              {/* Camera View */}
-              {showCamera && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="relative flex-1"
-                  style={{ maxHeight: '150px' }}
-                >
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover rounded"
-                  />
-                  <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 flex space-x-1">
-                    <motion.button
-                      onClick={capturePhoto}
-                      className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow"
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                    >
-                      <Camera className="text-green-600" size={12} />
-                    </motion.button>
-                    <motion.button
-                      onClick={stopCamera}
-                      className="px-1.5 py-0.5 bg-red-500 text-white rounded text-xs"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      Batal
-                    </motion.button>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Captured Image and Analysis */}
-              {capturedImage && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-2 flex-1 flex flex-col"
-                >
-                  {/* Image Preview */}
-                  <div className="relative flex-1" style={{ maxHeight: '120px' }}>
-                    <img
-                      src={capturedImage}
-                      alt="Captured"
-                      className="w-full h-full object-contain rounded border"
-                    />
-                    <button
-                      onClick={resetCapture}
-                      className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors text-xs"
-                    >
-                      ×
-                    </button>
-                  </div>
-
-                  {/* Prompt Input */}
-                  <div className="space-y-1">
-                    <h3 className="font-semibold text-gray-800 text-xs">
-                      Tanya tentang imej:
-                    </h3>
-                    
-                    {/* Suggested Prompts */}
-                    <div className="flex flex-wrap gap-0.5">
-                      {suggestedPrompts.slice(0, 2).map((suggestion, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setPrompt(suggestion)}
-                          className="text-xs bg-gray-100 hover:bg-gray-200 px-1.5 py-0.5 rounded transition-colors"
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Text Input */}
-                    <div className="flex space-x-1">
-                      <input
-                        type="text"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="Tulis soalan..."
-                        className="flex-1 px-1.5 py-0.5 border border-gray-300 rounded focus:outline-none focus:border-green-500 text-xs"
-                        disabled={state.aiDemos.vlm.isLoading}
-                      />
-                      <motion.button
-                        onClick={handleAnalyzeImage}
-                        disabled={!prompt.trim() || state.aiDemos.vlm.isLoading}
-                        className={`px-1.5 py-0.5 rounded transition-all text-xs ${
-                          prompt.trim() && !state.aiDemos.vlm.isLoading
-                            ? 'bg-green-500 text-white hover:bg-green-600'
-                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        }`}
-                        whileHover={prompt.trim() && !state.aiDemos.vlm.isLoading ? { scale: 1.05 } : {}}
-                        whileTap={prompt.trim() && !state.aiDemos.vlm.isLoading ? { scale: 0.95 } : {}}
-                      >
-                        {state.aiDemos.vlm.isLoading ? (
-                          <div className="flex items-center space-x-0.5">
-                            <div className="w-2 h-2 border border-white border-t-transparent rounded-full animate-spin" />
-                            <span className="text-xs">...</span>
-                          </div>
-                        ) : (
-                          <Send size={10} />
-                        )}
-                      </motion.button>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Results */}
-              {state.aiDemos.vlm.results.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-2 space-y-1 overflow-y-auto"
-                  style={{ maxHeight: '80px' }}
-                >
-                  <h3 className="font-semibold text-gray-800 text-xs">Hasil:</h3>
-                  {state.aiDemos.vlm.results.slice(-1).map((result, index) => (
-                    <div key={index} className="bg-gray-50 rounded p-1.5">
-                      <p className="text-xs text-gray-600 mb-0.5">
-                        <strong>Soalan:</strong> {result.prompt}
-                      </p>
-                      <p className="text-gray-800 text-xs">{result.response}</p>
-                    </div>
-                  ))}
-                </motion.div>
-              )}
+                </div>
+              </form>
             </div>
           </div>
         </motion.div>
@@ -379,6 +427,44 @@ const VLMDemoPage = () => {
 
       {/* Hidden canvas for image capture */}
       <canvas ref={canvasRef} className="hidden" />
+
+      {/* Camera View Modal - Fixed positioning */}
+      {showCamera && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
+        >
+          <div className="bg-white rounded-lg p-4 max-w-sm w-full mx-4">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-48 object-cover rounded mb-2"
+            />
+            <div className="flex justify-center space-x-2">
+              <motion.button
+                onClick={capturePhoto}
+                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Camera size={16} className="inline mr-1" />
+                Ambil
+              </motion.button>
+              <motion.button
+                onClick={stopCamera}
+                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors text-sm"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                Batal
+              </motion.button>
+            </div>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 };
