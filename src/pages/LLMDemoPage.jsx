@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, Send, User, Bot, Lightbulb, Zap, MessageSquare } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import apiService from '../services/api';
 
 const LLMDemoPage = () => {
   const [message, setMessage] = useState('');
@@ -35,23 +36,29 @@ const LLMDemoPage = () => {
     dispatch({ type: 'SET_LLM_LOADING', payload: true });
 
     try {
-      // Placeholder for actual API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Get conversation history for context
+      const conversationHistory = state.aiDemos.llm.chatHistory.map(msg => ({
+        role: msg.type === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      }));
+
+      // Call the real LLM API
+      const response = await apiService.chatWithLLM(message.trim(), conversationHistory);
       
       const botResponse = {
         id: Date.now() + 1,
         type: 'bot',
-        content: `Terima kasih atas soalan anda, ${state.user.name}! Ini adalah respons placeholder dari model LLM. Dalam implementasi sebenar, ini akan disambungkan ke server vLLM anda di port 5501.`,
+        content: response.response || response.message || 'Maaf, saya tidak dapat memberikan respons pada masa ini.',
         timestamp: new Date()
       };
 
       dispatch({ type: 'ADD_LLM_MESSAGE', payload: botResponse });
     } catch (error) {
-      console.error('Error:', error);
+      console.error('LLM API Error:', error);
       const errorMessage = {
         id: Date.now() + 1,
         type: 'bot',
-        content: 'Maaf, terdapat masalah dengan sambungan. Sila cuba lagi.',
+        content: 'Maaf, terdapat masalah dengan sambungan ke model AI. Sila pastikan backend server berjalan dan cuba lagi.',
         timestamp: new Date()
       };
       dispatch({ type: 'ADD_LLM_MESSAGE', payload: errorMessage });

@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, Eye, Upload, Send, Image as ImageIcon, Zap, Lightbulb, AlertCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import apiService from '../services/api';
 
 const VLMDemoPage = () => {
   const [capturedImage, setCapturedImage] = useState(null);
@@ -76,20 +77,32 @@ const VLMDemoPage = () => {
     dispatch({ type: 'SET_VLM_LOADING', payload: true });
 
     try {
-      // Placeholder for actual VLM API call
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Convert image to base64 if needed
+      const imageBase64 = capturedImage.startsWith('data:')
+        ? capturedImage.split(',')[1]
+        : capturedImage;
+
+      // Call the real VLM API
+      const response = await apiService.analyzeImage(imageBase64, prompt.trim());
       
       const result = {
         image: capturedImage,
         prompt: prompt.trim(),
-        response: `Berdasarkan imej yang anda berikan dan soalan "${prompt.trim()}", ini adalah analisis placeholder dari model VLM. Dalam implementasi sebenar, ini akan disambungkan ke OpenRouter dengan model Qwen2.5-VL.`,
+        response: response.analysis || response.description || response.response || 'Maaf, tidak dapat menganalisis imej pada masa ini.',
         timestamp: new Date()
       };
 
       dispatch({ type: 'ADD_VLM_RESULT', payload: { image: capturedImage, result }});
       setPrompt('');
     } catch (error) {
-      console.error('Error analyzing image:', error);
+      console.error('VLM API Error:', error);
+      const errorResult = {
+        image: capturedImage,
+        prompt: prompt.trim(),
+        response: 'Maaf, terdapat masalah dengan sambungan ke model penglihatan AI. Sila pastikan backend server berjalan dan cuba lagi.',
+        timestamp: new Date()
+      };
+      dispatch({ type: 'ADD_VLM_RESULT', payload: { image: capturedImage, result: errorResult }});
     } finally {
       dispatch({ type: 'SET_VLM_LOADING', payload: false });
     }

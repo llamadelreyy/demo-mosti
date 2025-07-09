@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, Play, Pause, Square, Download, Lightbulb, Zap, Volume2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import apiService from '../services/api';
 
 const WhisperDemoPage = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -134,20 +135,31 @@ const WhisperDemoPage = () => {
     dispatch({ type: 'SET_WHISPER_LOADING', payload: true });
 
     try {
-      // Placeholder for actual Whisper API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Call the real Whisper API
+      const response = await apiService.transcribeAudio(audioBlob);
       
       const transcription = {
         id: Date.now(),
         audioUrl: audioUrl,
-        text: `Ini adalah transkripsi placeholder untuk audio yang dirakam oleh ${state.user.name}. Dalam implementasi sebenar, ini akan menggunakan Whisper API untuk menukar audio kepada teks dengan tepat.`,
+        text: response.text || response.transcription || 'Maaf, tidak dapat mentranskripsikan audio pada masa ini.',
         timestamp: new Date(),
-        duration: recordingTime
+        duration: recordingTime,
+        language: response.language || 'ms',
+        confidence: response.confidence || null
       };
 
       dispatch({ type: 'ADD_WHISPER_TRANSCRIPTION', payload: transcription });
     } catch (error) {
-      console.error('Error transcribing audio:', error);
+      console.error('Whisper API Error:', error);
+      const errorTranscription = {
+        id: Date.now(),
+        audioUrl: audioUrl,
+        text: 'Maaf, terdapat masalah dengan sambungan ke model Whisper. Sila pastikan backend server berjalan dan cuba lagi.',
+        timestamp: new Date(),
+        duration: recordingTime,
+        isError: true
+      };
+      dispatch({ type: 'ADD_WHISPER_TRANSCRIPTION', payload: errorTranscription });
     } finally {
       dispatch({ type: 'SET_WHISPER_LOADING', payload: false });
     }

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Volume2, Play, Pause, Square, Download, Lightbulb, Zap, Type, VolumeX } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import apiService from '../services/api';
 
 const TTSDemoPage = () => {
   const [text, setText] = useState('');
@@ -46,11 +47,55 @@ const TTSDemoPage = () => {
     try {
       // Stop any current speech
       speechSynthesis.cancel();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
 
-      // Create speech synthesis utterance
+      // Call the real TTS API
+      const audioBlob = await apiService.synthesizeSpeech(text.trim(), 'ms');
+      
+      // Create audio URL and play
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        audioRef.current.onloadeddata = () => {
+          audioRef.current.play();
+          setIsPlaying(true);
+        };
+        
+        audioRef.current.onended = () => {
+          setIsPlaying(false);
+          dispatch({ type: 'SET_TTS_GENERATING', payload: false });
+        };
+        
+        audioRef.current.onerror = (event) => {
+          console.error('Audio playback error:', event);
+          setIsPlaying(false);
+          dispatch({ type: 'SET_TTS_GENERATING', payload: false });
+        };
+      }
+
+      // Add to history
+      const audioData = {
+        id: Date.now(),
+        text: text.trim(),
+        audioUrl: audioUrl,
+        voice: 'XTTS v2',
+        language: 'ms',
+        timestamp: new Date()
+      };
+
+      dispatch({ type: 'ADD_TTS_AUDIO', payload: audioData });
+
+    } catch (error) {
+      console.error('TTS API Error:', error);
+      
+      // Fallback to browser TTS
+      console.log('Falling back to browser TTS...');
       const utterance = new SpeechSynthesisUtterance(text.trim());
       
-      // Find selected voice
       const voice = availableVoices.find(v => v.name === selectedVoice);
       if (voice) {
         utterance.voice = voice;
@@ -60,59 +105,57 @@ const TTSDemoPage = () => {
       utterance.pitch = speechPitch;
       utterance.volume = 1;
 
-      // Set up event handlers
-      utterance.onstart = () => {
-        setIsPlaying(true);
-      };
-
+      utterance.onstart = () => setIsPlaying(true);
       utterance.onend = () => {
         setIsPlaying(false);
         dispatch({ type: 'SET_TTS_GENERATING', payload: false });
       };
-
-      utterance.onerror = (event) => {
-        console.error('Speech synthesis error:', event);
+      utterance.onerror = () => {
         setIsPlaying(false);
         dispatch({ type: 'SET_TTS_GENERATING', payload: false });
       };
 
-      // Start speech synthesis
       speechSynthesis.speak(utterance);
       setCurrentAudio(utterance);
 
-      // Add to history
       const audioData = {
         id: Date.now(),
         text: text.trim(),
-        voice: selectedVoice,
+        voice: selectedVoice + ' (Browser)',
         rate: speechRate,
         pitch: speechPitch,
         timestamp: new Date()
       };
 
       dispatch({ type: 'ADD_TTS_AUDIO', payload: audioData });
-
-    } catch (error) {
-      console.error('Error generating speech:', error);
-      dispatch({ type: 'SET_TTS_GENERATING', payload: false });
     }
   };
 
   const stopSpeech = () => {
     speechSynthesis.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
     setIsPlaying(false);
     dispatch({ type: 'SET_TTS_GENERATING', payload: false });
   };
 
   const pauseSpeech = () => {
-    if (speechSynthesis.speaking && !speechSynthesis.paused) {
+    if (audioRef.current && !audioRef.current.paused) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else if (speechSynthesis.speaking && !speechSynthesis.paused) {
       speechSynthesis.pause();
       setIsPlaying(false);
     }
   };
 
   const resumeSpeech = () => {
-    if (speechSynthesis.paused) {
+    if (audioRef.current && audioRef.current.paused) {
+      audioRef.current.play();
+      setIsPlaying(true);
+    } else if (speechSynthesis.paused) {
       speechSynthesis.resume();
       setIsPlaying(true);
     }
@@ -432,6 +475,9 @@ const TTSDemoPage = () => {
           </div>
         </motion.div>
       </div>
+      
+      {/* Hidden audio element for TTS playback */}
+      <audio ref={audioRef} className="hidden" />
     </div>
   );
 };

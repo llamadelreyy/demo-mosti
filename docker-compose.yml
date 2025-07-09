@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  ai-demo:
+    build: .
+    ports:
+      - "80:80"
+      - "8000:8000"
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - model_cache:/app/model_cache
+    environment:
+      - CUDA_VISIBLE_DEVICES=0,1
+      - OLLAMA_HOST=0.0.0.0:11434
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 2
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  ollama_data:
+    driver: local
+  model_cache:
+    driver: local
+
+networks:
+  default:
+    driver: bridge
