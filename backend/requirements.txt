@@ -25,7 +25,8 @@ ollama==0.1.7
 # OpenAI Whisper
 openai-whisper==20231117
 
-# Text-to-Speech (simple alternative to TTS)
+# Text-to-Speech with Google TTS
+gTTS==2.4.0
 pyttsx3==2.90
 
 # Audio processing
@@ -48,6 +49,9 @@ pydantic==2.5.0
 # Utilities
 python-dotenv==1.0.0
 loguru==0.7.2
+
+# PDF generation
+reportlab==4.0.7
 
 # Development
 pytest==7.4.3

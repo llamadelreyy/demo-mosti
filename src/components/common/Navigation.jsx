@@ -8,16 +8,16 @@ const Navigation = () => {
   const location = useLocation();
   
   const routes = [
-    { path: '/', name: 'Selamat Datang' },
+    { path: '/welcome', name: 'Selamat Datang' },
     { path: '/info', name: 'Maklumat' },
-    { path: '/nama', name: 'Nama' },
-    { path: '/llm', name: 'LLM' },
-    { path: '/vlm', name: 'VLM' },
-    { path: '/whisper', name: 'Whisper' },
-    { path: '/tts', name: 'TTS' },
-    { path: '/kuiz', name: 'Kuiz' },
-    { path: '/keputusan', name: 'Keputusan' },
-    { path: '/sijil', name: 'Sijil' }
+    { path: '/name-input', name: 'Nama' },
+    { path: '/llm-demo', name: 'LLM' },
+    { path: '/vlm-demo', name: 'VLM' },
+    { path: '/whisper-demo', name: 'Whisper' },
+    { path: '/tts-demo', name: 'TTS' },
+    { path: '/quiz', name: 'Kuiz' },
+    { path: '/results', name: 'Keputusan' },
+    { path: '/certificate', name: 'Sijil' }
   ];
   
   const currentIndex = routes.findIndex(route => route.path === location.pathname);
@@ -37,12 +37,12 @@ const Navigation = () => {
   };
   
   const handleHome = () => {
-    navigate('/');
+    navigate('/welcome');
   };
   
   return (
     <motion.div
-      className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm border-t border-gray-200 p-2"
+      className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm border-t border-gray-200 p-4"
       initial={{ y: 100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.3 }}
@@ -51,7 +51,7 @@ const Navigation = () => {
         <button
           onClick={handlePrevious}
           disabled={!canGoBack}
-          className={`flex items-center space-x-1 px-3 py-1 rounded transition-all text-sm ${
+          className={`flex items-center space-x-1 px-3 py-1 rounded transition-all ${
             canGoBack
               ? 'bg-blue-500 text-white hover:bg-blue-600 shadow'
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -71,7 +71,7 @@ const Navigation = () => {
         <button
           onClick={handleNext}
           disabled={!canGoForward}
-          className={`flex items-center space-x-1 px-3 py-1 rounded transition-all text-sm ${
+          className={`flex items-center space-x-1 px-3 py-1 rounded transition-all ${
             canGoForward
               ? 'bg-blue-500 text-white hover:bg-blue-600 shadow'
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'

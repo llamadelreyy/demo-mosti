@@ -34,14 +34,26 @@ const CertificatePage = () => {
   React.useEffect(() => {
     const generateQRCode = async () => {
       try {
+        const certificateId = `MOSTI-AI-${Date.now()}`;
+        
+        // Create URL that points to the PDF certificate endpoint
+        const baseUrl = window.location.origin.replace(':5174', ':8002'); // Replace frontend port with backend port
+        const pdfUrl = `${baseUrl}/api/certificate/pdf`;
+        
+        // Store certificate data for PDF generation
         const certificateData = {
           name: state.user.name,
           date: currentDate,
-          id: `MOSTI-AI-${Date.now()}`
+          certificate_id: certificateId
         };
         
-        const qrData = JSON.stringify(certificateData);
-        const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
+        // Store in sessionStorage for later use
+        sessionStorage.setItem('certificateData', JSON.stringify(certificateData));
+        
+        // Create QR code that contains the PDF URL with certificate data as query params
+        const qrUrl = `${pdfUrl}?name=${encodeURIComponent(state.user.name)}&date=${encodeURIComponent(currentDate)}&certificate_id=${encodeURIComponent(certificateId)}`;
+        
+        const qrCodeDataUrl = await QRCode.toDataURL(qrUrl, {
           width: 200,
           margin: 2,
           color: {
@@ -236,15 +248,7 @@ const CertificatePage = () => {
           transition={{ delay: 0.5 }}
           className="flex justify-center items-center mb-3"
         >
-          <motion.button
-            onClick={shareResult}
-            className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-white rounded-lg font-semibold text-sm shadow-lg hover:shadow-xl transition-all"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Share2 size={16} />
-            <span>Kongsi Pencapaian</span>
-          </motion.button>
+          
         </motion.div>
 
         {/* QR Code Info */}

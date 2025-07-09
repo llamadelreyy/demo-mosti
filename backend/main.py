@@ -6,12 +6,12 @@ from typing import List, Optional
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 import torch
 import whisper
 import ollama
-import pyttsx3
+from gtts import gTTS
 import io
 import base64
 import tempfile
@@ -21,6 +21,13 @@ import threading
 import queue
 import time
 from datetime import datetime
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+from reportlab.lib.colors import Color
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+from reportlab.lib.enums import TA_CENTER
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 # Global variables for models
 whisper_model = None
-tts_model = None
 executor = None
 whisper_queue = None
 tts_queue = None
@@ -83,6 +89,11 @@ class TTSResponse(BaseModel):
     audio_base64: str
     timestamp: datetime
 
+class CertificateRequest(BaseModel):
+    name: str
+    date: str
+    certificate_id: str
+
 # Initialize models
 async def init_whisper_model():
     """Initialize Whisper model on GPU 1"""
@@ -121,69 +132,23 @@ async def init_whisper_model():
         raise
 
 async def init_tts_model():
-    """Initialize TTS model using pyttsx3"""
-    global tts_model
+    """Initialize gTTS (Google Text-to-Speech)"""
     try:
-        logger.info("Initializing pyttsx3 TTS engine...")
+        logger.info("Initializing gTTS (Google Text-to-Speech)...")
         
-        # Initialize with specific driver for better compatibility
+        # Test gTTS functionality
         try:
-            tts_model = pyttsx3.init(driverName='espeak')
-            logger.info("TTS initialized with espeak driver")
-        except:
-            try:
-                tts_model = pyttsx3.init()
-                logger.info("TTS initialized with default driver")
-            except Exception as e:
-                logger.error(f"Failed to initialize TTS with any driver: {e}")
-                raise
-        
-        # Set properties for better quality
-        try:
-            voices = tts_model.getProperty('voices')
-            logger.info(f"Available TTS voices: {len(voices) if voices else 0}")
+            test_tts = gTTS(text="Test", lang='en', slow=False)
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=True) as test_file:
+                test_tts.save(test_file.name)
+                logger.info("gTTS test completed successfully")
+        except Exception as e:
+            logger.warning(f"gTTS test failed: {e}")
             
-            if voices:
-                # Try to find a female voice or use the first available
-                selected_voice = None
-                for voice in voices:
-                    logger.info(f"Voice: {voice.name} - {voice.id}")
-                    if 'female' in voice.name.lower() or 'woman' in voice.name.lower():
-                        selected_voice = voice
-                        break
-                
-                if selected_voice:
-                    tts_model.setProperty('voice', selected_voice.id)
-                    logger.info(f"Selected voice: {selected_voice.name}")
-                else:
-                    tts_model.setProperty('voice', voices[0].id)
-                    logger.info(f"Using default voice: {voices[0].name}")
-            else:
-                logger.warning("No TTS voices available")
-        except Exception as e:
-            logger.warning(f"Could not set TTS voice: {e}")
-        
-        # Set speech properties
-        try:
-            tts_model.setProperty('rate', 150)  # Speed of speech
-            tts_model.setProperty('volume', 0.9)  # Volume level (0.0 to 1.0)
-            logger.info("TTS properties set: rate=150, volume=0.9")
-        except Exception as e:
-            logger.warning(f"Could not set TTS properties: {e}")
-        
-        logger.info("pyttsx3 TTS engine initialized successfully")
-        
-        # Test TTS functionality
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as test_file:
-                tts_model.save_to_file("Test", test_file.name)
-                tts_model.runAndWait()
-                logger.info("TTS test completed successfully")
-        except Exception as e:
-            logger.warning(f"TTS test failed: {e}")
+        logger.info("gTTS initialized successfully")
             
     except Exception as e:
-        logger.error(f"Failed to initialize TTS engine: {e}")
+        logger.error(f"Failed to initialize gTTS: {e}")
         raise
 
 async def init_ollama():
@@ -248,7 +213,7 @@ def whisper_worker():
             logger.error(f"Whisper worker error: {e}")
 
 def tts_worker():
-    """Worker function for TTS processing using pyttsx3"""
+    """Worker function for TTS processing using gTTS"""
     global tts_queue
     while True:
         try:
@@ -259,79 +224,61 @@ def tts_worker():
             text, voice, speed, result_queue = task
             
             try:
-                logger.info(f"TTS processing text: {text[:50]}...")
+                logger.info(f"gTTS processing text: {text[:50]}...")
                 
-                # Check if TTS model is available
-                if tts_model is None:
-                    raise Exception("TTS model not initialized")
+                # Detect language for better TTS quality
+                detected_lang = detect_language(text)
                 
-                # Generate audio using direct memory approach
-                # Set speed (pyttsx3 uses rate)
-                rate = int(150 * speed)  # Base rate 150, adjust by speed factor
-                tts_model.setProperty('rate', rate)
+                # Map voice selection to language and TLD for gTTS
+                voice_config = {
+                    'female': {'lang': 'en', 'tld': 'com'},      # English US female-like
+                    'male': {'lang': 'en', 'tld': 'co.uk'},     # English UK male-like
+                    'female_us': {'lang': 'en', 'tld': 'com'},  # English US
+                    'male_us': {'lang': 'en', 'tld': 'us'},     # English US alternative
+                    'default': {'lang': 'en', 'tld': 'com'}     # Default
+                }
                 
-                # Try using espeak directly for faster generation
-                try:
-                    import subprocess
+                # Use detected language if Malay
+                if detected_lang == "malay":
+                    lang = 'ms'  # Malay language code
+                    tld = 'com'
+                else:
+                    config = voice_config.get(voice, voice_config['default'])
+                    lang = config['lang']
+                    tld = config['tld']
+                
+                # Adjust speed (gTTS has slow parameter)
+                slow = speed < 0.8  # Use slow speech if speed is less than 0.8
+                
+                # Generate audio using gTTS
+                tts = gTTS(text=text, lang=lang, slow=slow, tld=tld)
+                
+                # Save to temporary file and read as bytes
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
+                    tts.save(tmp_file.name)
                     
-                    # Map voice selection to espeak voices
-                    voice_map = {
-                        'female': 'en+f3',      # Female English voice
-                        'male': 'en+m1',        # Male English voice
-                        'female_us': 'en-us+f3', # Female US English
-                        'male_us': 'en-us+m1',   # Male US English
-                        'default': 'en+f3'      # Default to female
-                    }
+                    # Read the generated audio file
+                    with open(tmp_file.name, "rb") as f:
+                        audio_data = f.read()
                     
-                    # Select voice based on request
-                    espeak_voice = voice_map.get(voice, 'en+f3')
-                    
-                    # Use espeak for immediate audio generation
-                    cmd = [
-                        'espeak',
-                        '-s', str(rate),        # Speed
-                        '-v', espeak_voice,     # Voice selection
-                        '-a', '200',            # Amplitude (volume)
-                        '--stdout',             # Output to stdout
-                        text
-                    ]
-                    
-                    result = subprocess.run(cmd, capture_output=True, check=True)
-                    audio_data = result.stdout
+                    # Clean up temporary file
+                    os.unlink(tmp_file.name)
                     
                     if len(audio_data) == 0:
-                        raise Exception("espeak generated empty audio")
+                        raise Exception("gTTS generated empty audio")
                     
                     # Encode to base64 for transmission
                     audio_base64 = base64.b64encode(audio_data).decode()
-                    logger.info(f"TTS audio generated with espeak voice '{espeak_voice}', size: {len(audio_data)} bytes")
-                    
-                except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                    logger.warning(f"espeak failed: {e}, falling back to pyttsx3")
-                    
-                    # Fallback to pyttsx3 with minimal file operations
-                    with tempfile.NamedTemporaryFile(suffix=".wav") as tmp_file:
-                        tts_model.save_to_file(text, tmp_file.name)
-                        tts_model.runAndWait()
-                        
-                        # Read the generated file
-                        with open(tmp_file.name, "rb") as f:
-                            audio_data = f.read()
-                        
-                        if len(audio_data) == 0:
-                            raise Exception("pyttsx3 generated empty audio")
-                        
-                        audio_base64 = base64.b64encode(audio_data).decode()
-                        logger.info(f"TTS audio generated with pyttsx3, size: {len(audio_data)} bytes")
+                    logger.info(f"gTTS audio generated with lang='{lang}', tld='{tld}', slow={slow}, size: {len(audio_data)} bytes")
                 
                 result_queue.put({
                     "audio_base64": audio_base64,
                     "success": True
                 })
-                logger.info("TTS processing completed successfully")
+                logger.info("gTTS processing completed successfully")
                     
             except Exception as e:
-                logger.error(f"TTS processing error: {str(e)}")
+                logger.error(f"gTTS processing error: {str(e)}")
                 result_queue.put({
                     "error": str(e),
                     "success": False
@@ -341,7 +288,7 @@ def tts_worker():
         except queue.Empty:
             continue
         except Exception as e:
-            logger.error(f"TTS worker error: {e}")
+            logger.error(f"gTTS worker error: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -405,6 +352,108 @@ async def health_check():
         "gpu_available": torch.cuda.is_available(),
         "gpu_count": torch.cuda.device_count() if torch.cuda.is_available() else 0
     }
+
+def generate_certificate_pdf(name: str, date: str, certificate_id: str) -> bytes:
+    """Generate a PDF certificate using ReportLab"""
+    try:
+        # Create a BytesIO buffer to store the PDF
+        buffer = io.BytesIO()
+        
+        # Create the PDF document
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            rightMargin=20*mm,
+            leftMargin=20*mm,
+            topMargin=20*mm,
+            bottomMargin=20*mm
+        )
+        
+        # Get styles
+        styles = getSampleStyleSheet()
+        
+        # Create custom styles
+        title_style = styles['Title']
+        title_style.fontSize = 28
+        title_style.textColor = Color(0.6, 0.4, 0.2)  # Amber color
+        title_style.alignment = TA_CENTER
+        
+        heading_style = styles['Heading1']
+        heading_style.fontSize = 20
+        heading_style.textColor = Color(0.6, 0.4, 0.2)
+        heading_style.alignment = TA_CENTER
+        
+        normal_style = styles['Normal']
+        normal_style.fontSize = 14
+        normal_style.textColor = Color(0.4, 0.3, 0.1)
+        normal_style.alignment = TA_CENTER
+        
+        name_style = styles['Heading2']
+        name_style.fontSize = 24
+        name_style.textColor = Color(0.6, 0.4, 0.2)
+        name_style.alignment = TA_CENTER
+        
+        # Build the content
+        content = []
+        
+        # Add logo if it exists
+        logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
+        if os.path.exists(logo_path):
+            try:
+                logo = Image(logo_path, width=60*mm, height=60*mm)
+                logo.hAlign = 'CENTER'
+                content.append(logo)
+                content.append(Spacer(1, 10*mm))
+            except Exception as e:
+                logger.warning(f"Could not load logo: {e}")
+                content.append(Spacer(1, 30*mm))
+        else:
+            content.append(Spacer(1, 30*mm))
+        
+        # Title
+        content.append(Paragraph("SIJIL PENCAPAIAN", title_style))
+        content.append(Spacer(1, 20*mm))
+        
+        # Certificate text
+        content.append(Paragraph("Dengan ini disahkan bahawa", normal_style))
+        content.append(Spacer(1, 15*mm))
+        
+        # Name
+        content.append(Paragraph(name, name_style))
+        content.append(Spacer(1, 15*mm))
+        
+        # Achievement text
+        content.append(Paragraph("telah diiktiraf sebagai", normal_style))
+        content.append(Spacer(1, 10*mm))
+        
+        # Certification title
+        content.append(Paragraph("Certified Gen-AI Learner", heading_style))
+        content.append(Spacer(1, 15*mm))
+        
+        # Description
+        description = """dan telah menunjukkan pemahaman yang baik tentang teknologi AI termasuk
+        Large Language Models (LLM), Vision Language Models (VLM),
+        Speech-to-Text (Whisper), dan Text-to-Speech (TTS)"""
+        content.append(Paragraph(description, normal_style))
+        content.append(Spacer(1, 20*mm))
+        
+        # Date and ID
+        content.append(Paragraph(f"Tarikh: {date}", normal_style))
+        content.append(Spacer(1, 5*mm))
+        content.append(Paragraph(f"ID Sijil: {certificate_id}", normal_style))
+        
+        # Build the PDF
+        doc.build(content)
+        
+        # Get the PDF data
+        pdf_data = buffer.getvalue()
+        buffer.close()
+        
+        return pdf_data
+        
+    except Exception as e:
+        logger.error(f"Error generating PDF certificate: {e}")
+        raise
 
 def detect_language(text: str) -> str:
     """Simple language detection based on common words"""
@@ -574,36 +623,36 @@ async def tts_generate(request: TTSRequest):
 # TTS voices endpoint
 @app.get("/api/tts/voices")
 async def get_tts_voices():
-    """Get available TTS voices"""
+    """Get available gTTS voices"""
     return {
         "voices": [
             {
                 "id": "female",
-                "name": "Female English",
+                "name": "Female English (US)",
                 "language": "en",
                 "gender": "female",
-                "description": "Clear female English voice"
+                "description": "Google TTS English US voice"
             },
             {
                 "id": "male",
-                "name": "Male English",
+                "name": "Male English (UK)",
                 "language": "en",
                 "gender": "male",
-                "description": "Clear male English voice"
+                "description": "Google TTS English UK voice"
             },
             {
                 "id": "female_us",
                 "name": "Female US English",
                 "language": "en-us",
                 "gender": "female",
-                "description": "American female English voice"
+                "description": "Google TTS American English voice"
             },
             {
                 "id": "male_us",
-                "name": "Male US English",
+                "name": "Male US English Alt",
                 "language": "en-us",
                 "gender": "male",
-                "description": "American male English voice"
+                "description": "Google TTS American English alternative voice"
             }
         ],
         "default": "female"
@@ -620,6 +669,40 @@ async def get_status():
         "gpu_1_available": torch.cuda.is_available() and torch.cuda.device_count() > 1,
         "timestamp": datetime.now()
     }
+
+# Certificate PDF endpoint
+@app.get("/api/certificate/pdf")
+async def generate_certificate_pdf_endpoint(name: str, date: str, certificate_id: str):
+    """Generate and serve PDF certificate via GET request with query parameters"""
+    try:
+        logger.info(f"Generating PDF certificate for: {name}")
+        
+        # Generate the PDF
+        pdf_data = generate_certificate_pdf(
+            name=name,
+            date=date,
+            certificate_id=certificate_id
+        )
+        
+        # Create filename
+        safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        filename = f"Sijil-AI-{safe_name}-{certificate_id}.pdf"
+        
+        logger.info(f"PDF certificate generated successfully, size: {len(pdf_data)} bytes")
+        
+        # Return PDF as response
+        return Response(
+            content=pdf_data,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename={filename}",
+                "Content-Type": "application/pdf"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Certificate PDF generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Certificate generation failed: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(
