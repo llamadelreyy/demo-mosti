@@ -11,7 +11,7 @@ from pydantic import BaseModel
 import torch
 import whisper
 import ollama
-from TTS.api import TTS
+import pyttsx3
 import io
 import base64
 import tempfile
@@ -34,7 +34,7 @@ whisper_queue = None
 tts_queue = None
 
 # GPU allocation
-GPU_0 = "cuda:0"  # For LLM (Ollama Gemma2:4b) and VLM (LLaVA)
+GPU_0 = "cuda:0"  # For LLM (Ollama Llama3.2:1b) and VLM (LLaVA)
 GPU_1 = "cuda:1"  # For Whisper and TTS
 
 class GPUManager:
@@ -70,7 +70,7 @@ class VLMResponse(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str
-    voice: str = "tts_models/multilingual/multi-dataset/xtts_v2"
+    voice: str = "default"
     speed: float = 1.0
     user_name: str = "User"
 
@@ -85,29 +85,55 @@ class TTSResponse(BaseModel):
 
 # Initialize models
 async def init_whisper_model():
-    """Initialize Whisper model on GPU 1"""
+    """Initialize Whisper model on available GPU"""
     global whisper_model
     try:
         with gpu_manager.get_gpu_1_lock():
-            logger.info("Loading Whisper model on GPU 1...")
-            device = GPU_1 if torch.cuda.is_available() else "cpu"
-            whisper_model = whisper.load_model("turbo", device=device)
+            # Check available GPUs and use appropriate device
+            if torch.cuda.is_available():
+                gpu_count = torch.cuda.device_count()
+                logger.info(f"PyTorch detects {gpu_count} GPU(s)")
+                
+                if gpu_count > 1:
+                    device = "cuda:1"
+                    logger.info("Loading Whisper model on GPU 1...")
+                else:
+                    device = "cuda:0"
+                    logger.info("Only 1 GPU detected by PyTorch, loading Whisper model on GPU 0...")
+            else:
+                device = "cpu"
+                logger.info("CUDA not available, loading Whisper model on CPU...")
+            
+            whisper_model = whisper.load_model("base", device=device)
             logger.info(f"Whisper model loaded successfully on {device}")
     except Exception as e:
         logger.error(f"Failed to load Whisper model: {e}")
         raise
 
 async def init_tts_model():
-    """Initialize TTS model on GPU 1"""
+    """Initialize TTS model using pyttsx3"""
     global tts_model
     try:
-        with gpu_manager.get_gpu_1_lock():
-            logger.info("Loading TTS model on GPU 1...")
-            device = GPU_1 if torch.cuda.is_available() else "cpu"
-            tts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
-            logger.info(f"TTS model loaded successfully on {device}")
+        logger.info("Initializing pyttsx3 TTS engine...")
+        tts_model = pyttsx3.init()
+        
+        # Set properties for better quality
+        voices = tts_model.getProperty('voices')
+        if voices:
+            # Try to find a female voice or use the first available
+            for voice in voices:
+                if 'female' in voice.name.lower() or 'woman' in voice.name.lower():
+                    tts_model.setProperty('voice', voice.id)
+                    break
+            else:
+                tts_model.setProperty('voice', voices[0].id)
+        
+        tts_model.setProperty('rate', 150)  # Speed of speech
+        tts_model.setProperty('volume', 0.9)  # Volume level (0.0 to 1.0)
+        
+        logger.info("pyttsx3 TTS engine initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to load TTS model: {e}")
+        logger.error(f"Failed to initialize TTS engine: {e}")
         raise
 
 async def init_ollama():
@@ -120,10 +146,10 @@ async def init_ollama():
         
         # Pull models if not exists
         try:
-            await asyncio.to_thread(ollama.pull, "gemma2:4b")
-            logger.info("Gemma2:4b model ready")
+            await asyncio.to_thread(ollama.pull, "llama3.2:1b")
+            logger.info("Llama3.2:1b model ready")
         except Exception as e:
-            logger.warning(f"Could not pull gemma2:4b: {e}")
+            logger.warning(f"Could not pull llama3.2:1b: {e}")
             
         try:
             await asyncio.to_thread(ollama.pull, "llava")
@@ -169,7 +195,7 @@ def whisper_worker():
             logger.error(f"Whisper worker error: {e}")
 
 def tts_worker():
-    """Worker function for TTS processing"""
+    """Worker function for TTS processing using pyttsx3"""
     global tts_queue
     while True:
         try:
@@ -179,32 +205,33 @@ def tts_worker():
                 
             text, voice, speed, result_queue = task
             
-            with gpu_manager.get_gpu_1_lock():
-                try:
-                    # Generate audio
-                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-                        tts_model.tts_to_file(
-                            text=text,
-                            file_path=tmp_file.name,
-                            speed=speed
-                        )
+            try:
+                # Generate audio using pyttsx3
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                    # Set speed (pyttsx3 uses rate)
+                    rate = int(150 * speed)  # Base rate 150, adjust by speed factor
+                    tts_model.setProperty('rate', rate)
+                    
+                    # Save to file
+                    tts_model.save_to_file(text, tmp_file.name)
+                    tts_model.runAndWait()
+                    
+                    # Read and encode audio
+                    with open(tmp_file.name, "rb") as audio_file:
+                        audio_data = audio_file.read()
+                        audio_base64 = base64.b64encode(audio_data).decode()
                         
-                        # Read and encode audio
-                        with open(tmp_file.name, "rb") as audio_file:
-                            audio_data = audio_file.read()
-                            audio_base64 = base64.b64encode(audio_data).decode()
-                            
-                        os.unlink(tmp_file.name)
-                        
-                        result_queue.put({
-                            "audio_base64": audio_base64,
-                            "success": True
-                        })
-                except Exception as e:
+                    os.unlink(tmp_file.name)
+                    
                     result_queue.put({
-                        "error": str(e),
-                        "success": False
+                        "audio_base64": audio_base64,
+                        "success": True
                     })
+            except Exception as e:
+                result_queue.put({
+                    "error": str(e),
+                    "success": False
+                })
                     
             tts_queue.task_done()
         except queue.Empty:
@@ -278,13 +305,13 @@ async def health_check():
 # LLM endpoint
 @app.post("/api/llm", response_model=LLMResponse)
 async def llm_chat(request: LLMRequest):
-    """Chat with LLM using Ollama Gemma2:4b on GPU 0"""
+    """Chat with LLM using Ollama Llama3.2:1b on GPU 0"""
     try:
         with gpu_manager.get_gpu_0_lock():
             # Use Ollama for LLM
             response = await asyncio.to_thread(
                 ollama.chat,
-                model="gemma2:4b",
+                model="llama3.2:1b",
                 messages=[{
                     "role": "user",
                     "content": f"Jawab dalam Bahasa Malaysia: {request.message}"
@@ -419,7 +446,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8002,
         reload=False,
         workers=1,
         log_level="info"

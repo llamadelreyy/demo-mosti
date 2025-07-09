@@ -1,15 +1,54 @@
+# FastAPI and web server
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
-aiofiles==23.2.1
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# CORS and middleware
+fastapi-cors==0.0.6
+
+# HTTP client
+httpx==0.25.2
+requests==2.31.0
+
+# AI/ML libraries
 torch==2.1.0
 torchaudio==2.1.0
 torchvision==0.16.0
-openai-whisper==20231117
-TTS==0.22.0
+transformers>=4.35.0
+accelerate>=0.24.0
+
+# Ollama client
 ollama==0.1.7
+
+# OpenAI Whisper
+openai-whisper==20231117
+
+# Text-to-Speech (simple alternative to TTS)
+pyttsx3==2.90
+
+# Audio processing
+librosa==0.10.1
+soundfile==0.12.1
+pydub==0.25.1
+
+# Image processing
 Pillow==10.1.0
+opencv-python==4.8.1.78
+
+# Async and concurrency
+aiofiles==23.2.1
+
+# Data handling
 numpy==1.24.3
+pandas>=2.0.0
 pydantic==2.5.0
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+
+# Utilities
+python-dotenv==1.0.0
+loguru==0.7.2
+
+# Development
+pytest==7.4.3
+pytest-asyncio==0.21.1

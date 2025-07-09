@@ -90,7 +90,22 @@ cd backend
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     echo "  Creating Python virtual environment..."
+    
+    # Check if python3-venv is installed
+    if ! python3 -c "import venv" 2>/dev/null; then
+        echo "  📦 Installing python3-venv package..."
+        sudo apt update && sudo apt install -y python3-venv python3-pip
+        if [ $? -ne 0 ]; then
+            echo "  ❌ Failed to install python3-venv. Please run: sudo apt install python3-venv python3-pip"
+            exit 1
+        fi
+    fi
+    
     python3 -m venv venv
+    if [ $? -ne 0 ]; then
+        echo "  ❌ Failed to create virtual environment"
+        exit 1
+    fi
 fi
 
 # Activate virtual environment
@@ -125,23 +140,27 @@ else
     echo "  ✅ Ollama already installed"
 fi
 
+# Stop system Ollama service if running
+echo "  Stopping system Ollama service..."
+sudo systemctl stop ollama 2>/dev/null || true
+
 # Start Ollama service with keep alive forever
 if ! port_in_use 11434; then
     echo "  Starting Ollama service with keep-alive forever..."
     OLLAMA_KEEP_ALIVE=-1 ollama serve &
     OLLAMA_PID=$!
-    sleep 5
+    sleep 10
 else
     echo "  ✅ Ollama service already running"
 fi
 
 # Pull required models
 echo "  Checking AI models..."
-if ! ollama list | grep -q "gemma2:4b"; then
-    echo "  Downloading Gemma2:4b model..."
-    ollama pull gemma2:4b
+if ! ollama list | grep -q "llama3.2:1b"; then
+    echo "  Downloading Llama3.2:1b (SLM) model..."
+    ollama pull llama3.2:1b
 else
-    echo "  ✅ Gemma2:4b model ready"
+    echo "  ✅ Llama3.2:1b model ready"
 fi
 
 if ! ollama list | grep -q "llava"; then
@@ -151,30 +170,29 @@ else
     echo "  ✅ LLaVA model ready"
 fi
 
-# Download Whisper and TTS models
+# Download Whisper and TTS models (using virtual environment)
 echo "  Checking Whisper model..."
+source venv/bin/activate
 python3 -c "
 try:
     import whisper
-    whisper.load_model('turbo')
+    whisper.load_model('base')
     print('  ✅ Whisper model ready')
 except:
     print('  📥 Downloading Whisper model...')
     import whisper
-    whisper.load_model('turbo')
-"
+    whisper.load_model('base')
+" 2>/dev/null || echo "  ⚠️  Whisper will be downloaded when needed"
 
 echo "  Checking TTS model..."
 python3 -c "
 try:
-    from TTS.api import TTS
-    TTS('tts_models/multilingual/multi-dataset/xtts_v2')
-    print('  ✅ TTS model ready')
+    import pyttsx3
+    engine = pyttsx3.init()
+    print('  ✅ TTS (pyttsx3) ready')
 except:
-    print('  📥 Downloading TTS model...')
-    from TTS.api import TTS
-    TTS('tts_models/multilingual/multi-dataset/xtts_v2')
-"
+    print('  ⚠️  TTS will use system speech synthesis')
+" 2>/dev/null || echo "  ⚠️  TTS will use system speech synthesis"
 
 cd ..
 
@@ -184,9 +202,36 @@ echo "🚀 Starting services..."
 # Start Backend with Ollama keep-alive setting
 echo "  Starting Backend server..."
 cd backend
-source venv/bin/activate
-OLLAMA_KEEP_ALIVE=-1 python main.py &
-BACKEND_PID=$!
+if [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+    OLLAMA_KEEP_ALIVE=-1 python3 main.py &
+    BACKEND_PID=$!
+else
+    echo "  ❌ Virtual environment not found. Creating it..."
+    
+    # Check if python3-venv is installed
+    if ! python3 -c "import venv" 2>/dev/null; then
+        echo "  📦 Installing python3-venv package..."
+        sudo apt update && sudo apt install -y python3-venv python3-pip
+        if [ $? -ne 0 ]; then
+            echo "  ❌ Failed to install python3-venv. Please run: sudo apt install python3-venv python3-pip"
+            exit 1
+        fi
+    fi
+    
+    python3 -m venv venv
+    if [ $? -ne 0 ]; then
+        echo "  ❌ Failed to create virtual environment"
+        exit 1
+    fi
+    
+    source venv/bin/activate
+    pip install --upgrade pip
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+    pip install -r requirements.txt
+    OLLAMA_KEEP_ALIVE=-1 python3 main.py &
+    BACKEND_PID=$!
+fi
 cd ..
 
 # Wait for backend to start
@@ -194,8 +239,8 @@ echo "  Waiting for backend to initialize..."
 sleep 10
 
 # Check if backend is running
-if port_in_use 8000; then
-    echo "  ✅ Backend server running on http://localhost:8000"
+if port_in_use 8002; then
+    echo "  ✅ Backend server running on http://localhost:8002"
 else
     echo "  ❌ Backend failed to start"
     cleanup
@@ -224,8 +269,8 @@ echo ""
 echo "🎉 All services started successfully!"
 echo ""
 echo "📱 Frontend: http://localhost:5173"
-echo "🔧 Backend API: http://localhost:8000"
-echo "📚 API Docs: http://localhost:8000/docs"
+echo "🔧 Backend API: http://localhost:8002"
+echo "📚 API Docs: http://localhost:8002/docs"
 echo ""
 echo "Press Ctrl+C to stop all services"
 echo ""
