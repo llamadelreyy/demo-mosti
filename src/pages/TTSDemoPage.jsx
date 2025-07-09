@@ -8,7 +8,6 @@ const TTSDemoPage = () => {
   const [text, setText] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentAudio, setCurrentAudio] = useState(null);
-  const [selectedVoice, setSelectedVoice] = useState('');
   const [speechRate, setSpeechRate] = useState(1);
   const [speechPitch, setSpeechPitch] = useState(1);
   const [availableVoices, setAvailableVoices] = useState([]);
@@ -16,19 +15,14 @@ const TTSDemoPage = () => {
   const { state, dispatch } = useApp();
   const audioRef = useRef(null);
 
-  // Load available voices
+  // Load available voices for fallback
   React.useEffect(() => {
     const loadVoices = () => {
       const voices = speechSynthesis.getVoices();
-      const malayVoices = voices.filter(voice => 
+      const malayVoices = voices.filter(voice =>
         voice.lang.includes('ms') || voice.lang.includes('id') || voice.lang.includes('en')
       );
       setAvailableVoices(malayVoices.length > 0 ? malayVoices : voices.slice(0, 5));
-      if (malayVoices.length > 0 && !selectedVoice) {
-        setSelectedVoice(malayVoices[0].name);
-      } else if (voices.length > 0 && !selectedVoice) {
-        setSelectedVoice(voices[0].name);
-      }
     };
 
     loadVoices();
@@ -37,7 +31,7 @@ const TTSDemoPage = () => {
     return () => {
       speechSynthesis.removeEventListener('voiceschanged', loadVoices);
     };
-  }, [selectedVoice]);
+  }, []);
 
   const generateSpeech = async () => {
     if (!text.trim()) return;
@@ -52,8 +46,8 @@ const TTSDemoPage = () => {
         audioRef.current.currentTime = 0;
       }
 
-      // Call the real TTS API
-      const audioBlob = await apiService.synthesizeSpeech(text.trim(), 'ms');
+      // Call the real TTS API with default voice and speed
+      const audioBlob = await apiService.synthesizeSpeech(text.trim(), 'female', speechRate);
       
       // Create audio URL and play
       const audioUrl = URL.createObjectURL(audioBlob);
@@ -82,8 +76,8 @@ const TTSDemoPage = () => {
         id: Date.now(),
         text: text.trim(),
         audioUrl: audioUrl,
-        voice: 'XTTS v2',
-        language: 'ms',
+        voice: 'AI Voice',
+        rate: speechRate,
         timestamp: new Date()
       };
 
@@ -96,9 +90,8 @@ const TTSDemoPage = () => {
       console.log('Falling back to browser TTS...');
       const utterance = new SpeechSynthesisUtterance(text.trim());
       
-      const voice = availableVoices.find(v => v.name === selectedVoice);
-      if (voice) {
-        utterance.voice = voice;
+      if (availableVoices.length > 0) {
+        utterance.voice = availableVoices[0];
       }
       
       utterance.rate = speechRate;
@@ -121,7 +114,7 @@ const TTSDemoPage = () => {
       const audioData = {
         id: Date.now(),
         text: text.trim(),
-        voice: selectedVoice + ' (Browser)',
+        voice: 'Browser Voice',
         rate: speechRate,
         pitch: speechPitch,
         timestamp: new Date()
@@ -201,19 +194,25 @@ const TTSDemoPage = () => {
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
               <motion.div
                 className="bg-orange-50 rounded-lg p-2"
                 whileHover={{ scale: 1.02 }}
               >
                 <div className="flex items-center space-x-1 mb-1">
                   <Lightbulb className="text-orange-600" size={12} />
-                  <h3 className="font-semibold text-orange-800 text-xs">Apa itu TTS?</h3>
+                  <h3 className="font-semibold text-orange-800 text-xs">Apa itu Text-to-Speech?</h3>
                 </div>
-                <p className="text-orange-700 text-xs">
-                  Teknologi yang menukar teks bertulis kepada pertuturan yang
-                  kedengaran natural menggunakan kecerdasan buatan.
+                <p className="text-orange-700 text-xs mb-2">
+                  TTS adalah teknologi AI yang menukar teks bertulis kepada pertuturan yang kedengaran natural dan ekspresif.
                 </p>
+                <div className="text-orange-700 text-xs space-y-1">
+                  <p><strong>Teknologi Asas:</strong></p>
+                  <p>• Neural vocoder untuk sintesis audio berkualiti tinggi</p>
+                  <p>• Deep learning models untuk intonasi natural</p>
+                  <p>• Prosody modeling untuk ritma dan penekanan</p>
+                  <p>• Phoneme-to-audio conversion dengan neural networks</p>
+                </div>
               </motion.div>
 
               <motion.div
@@ -222,14 +221,21 @@ const TTSDemoPage = () => {
               >
                 <div className="flex items-center space-x-1 mb-1">
                   <Zap className="text-blue-600" size={12} />
-                  <h3 className="font-semibold text-blue-800 text-xs">Keupayaan</h3>
+                  <h3 className="font-semibold text-blue-800 text-xs">Keupayaan TTS Moden</h3>
                 </div>
-                <ul className="text-blue-700 text-xs space-y-0.5">
-                  <li>• Suara yang natural</li>
-                  <li>• Pelbagai gaya suara</li>
-                  <li>• Kawalan kelajuan & nada</li>
-                  <li>• Sokongan pelbagai bahasa</li>
-                </ul>
+                <div className="text-blue-700 text-xs space-y-1">
+                  <p><strong>Kualiti Suara:</strong></p>
+                  <p>• Suara yang hampir tidak dapat dibezakan dari manusia</p>
+                  <p>• Intonasi dan emosi yang natural</p>
+                  <p>• Kawalan kelajuan, nada, dan volume</p>
+                  <p>• Pelbagai gaya suara (formal, kasual, dramatik)</p>
+                  
+                  <p className="mt-2"><strong>Ciri-ciri Lanjutan:</strong></p>
+                  <p>• Real-time synthesis dengan latency rendah</p>
+                  <p>• Sokongan SSML untuk kawalan lanjutan</p>
+                  <p>• Voice cloning dan personalisasi</p>
+                  <p>• Multilingual dengan accent preservation</p>
+                </div>
               </motion.div>
 
               <motion.div
@@ -238,184 +244,119 @@ const TTSDemoPage = () => {
               >
                 <div className="flex items-center space-x-1 mb-1">
                   <Type className="text-green-600" size={12} />
-                  <h3 className="font-semibold text-green-800 text-xs">Aplikasi</h3>
+                  <h3 className="font-semibold text-green-800 text-xs">Cara Kerja TTS</h3>
                 </div>
-                <ul className="text-green-700 text-xs space-y-0.5">
-                  <li>• Asisten suara</li>
-                  <li>• Buku audio</li>
-                  <li>• Aksesibiliti</li>
-                  <li>• Pembelajaran bahasa</li>
-                </ul>
+                <div className="text-green-700 text-xs space-y-1">
+                  <p><strong>Pipeline Pemprosesan:</strong></p>
+                  <p>1. <strong>Text Analysis:</strong> Parsing dan normalisasi teks input</p>
+                  <p>2. <strong>Linguistic Processing:</strong> Phoneme conversion dan stress marking</p>
+                  <p>3. <strong>Prosody Generation:</strong> Rhythm, intonation, dan timing</p>
+                  <p>4. <strong>Acoustic Modeling:</strong> Mel-spectrogram generation</p>
+                  <p>5. <strong>Vocoding:</strong> Neural vocoder menghasilkan waveform</p>
+                  <p>6. <strong>Post-processing:</strong> Audio enhancement dan normalisasi</p>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="bg-purple-50 rounded-lg p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <Volume2 className="text-purple-600" size={12} />
+                  <h3 className="font-semibold text-purple-800 text-xs">Aplikasi Dunia Sebenar</h3>
+                </div>
+                <div className="text-purple-700 text-xs space-y-1">
+                  <p><strong>Industri & Kegunaan:</strong></p>
+                  <p>• <strong>Aksesibiliti:</strong> Screen readers untuk OKU penglihatan</p>
+                  <p>• <strong>Pendidikan:</strong> E-learning dan buku audio interaktif</p>
+                  <p>• <strong>Hiburan:</strong> Dubbing, podcast, dan content creation</p>
+                  <p>• <strong>Perniagaan:</strong> IVR systems dan customer service</p>
+                  <p>• <strong>Automotif:</strong> Navigation dan in-car assistants</p>
+                  <p>• <strong>IoT:</strong> Smart speakers dan home automation</p>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="bg-red-50 rounded-lg p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <Lightbulb className="text-red-600" size={12} />
+                  <h3 className="font-semibold text-red-800 text-xs">Tips Penggunaan Optimum</h3>
+                </div>
+                <div className="text-red-700 text-xs space-y-1">
+                  <p><strong>Penulisan Teks:</strong></p>
+                  <p>• Gunakan tanda baca yang betul untuk intonasi</p>
+                  <p>• Elakkan singkatan yang tidak standard</p>
+                  <p>• Tulis nombor dalam bentuk perkataan untuk kejelasan</p>
+                  
+                  <p className="mt-2"><strong>Kawalan Suara:</strong></p>
+                  <p>• Laraskan kelajuan mengikut jenis kandungan</p>
+                  <p>• Gunakan pause untuk penekanan</p>
+                  <p>• Pilih nada yang sesuai dengan konteks</p>
+                  <p>• Test dengan pelbagai peranti audio</p>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="bg-indigo-50 rounded-lg p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <Zap className="text-indigo-600" size={12} />
+                  <h3 className="font-semibold text-indigo-800 text-xs">Kualiti & Limitasi</h3>
+                </div>
+                <div className="text-indigo-700 text-xs space-y-1">
+                  <p><strong>Faktor Kualiti:</strong></p>
+                  <p>• Model quality: Neural TTS (95%) vs Concatenative (70%)</p>
+                  <p>• Bahasa: Native language (98%) vs foreign (85%)</p>
+                  <p>• Teks: Simple prose (95%) vs technical terms (80%)</p>
+                  
+                  <p className="mt-2"><strong>Cabaran Semasa:</strong></p>
+                  <p>• Emotional expression masih terhad</p>
+                  <p>• Pronunciation untuk nama khas</p>
+                  <p>• Context-dependent intonation</p>
+                  <p>• Computational requirements untuk real-time</p>
+                </div>
               </motion.div>
             </div>
           </div>
         </motion.div>
 
-        {/* Main Interface */}
+        {/* TTS Interface */}
         <motion.div
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
-          className="lg:col-span-2 flex flex-col"
+          className="lg:col-span-2 flex flex-col h-full"
         >
-          <div className="bg-white rounded shadow-sm overflow-hidden flex flex-col flex-1">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-2">
-              <div className="flex items-center space-x-2">
-                <Volume2 size={16} />
+          <div className="bg-white rounded shadow-sm flex flex-col h-full">
+            {/* TTS Header */}
+            <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-1.5 rounded-t flex-shrink-0">
+              <div className="flex items-center space-x-1">
+                <Volume2 size={12} />
                 <div>
-                  <h3 className="font-semibold text-sm">Tukar Teks kepada Suara</h3>
+                  <h3 className="font-semibold text-xs">AI Text-to-Speech</h3>
                   <p className="text-orange-100 text-xs">
-                    Taip teks dan dengar bagaimana AI mengucapkannya, {state.user.name}!
+                    Tukar teks kepada suara, {state.user.name}!
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="p-2 space-y-1 flex-1 flex flex-col min-h-0">
-              {/* Text Input */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Masukkan Teks untuk Diucapkan:
-                </label>
-                <textarea
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Taip teks anda di sini..."
-                  className="w-full h-16 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-orange-500 resize-none text-xs"
-                  maxLength={500}
-                />
-                <div className="flex justify-between items-center mt-1">
-                  <span className="text-xs text-gray-500">
-                    {text.length}/500 aksara
-                  </span>
-                  <button
-                    onClick={clearText}
-                    className="text-xs text-gray-500 hover:text-red-500 transition-colors"
-                  >
-                    Kosongkan
-                  </button>
-                </div>
-              </div>
-
-              {/* Sample Texts */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Atau Pilih Contoh Teks:
-                </label>
-                <div className="grid grid-cols-1 gap-1">
-                  {sampleTexts.slice(0, 2).map((sample, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleSampleText(sample)}
-                      className="text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded p-1 transition-colors"
-                    >
-                      {sample}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Voice Settings */}
-              <div className="grid md:grid-cols-3 gap-1">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Pilih Suara:
-                  </label>
-                  <select
-                    value={selectedVoice}
-                    onChange={(e) => setSelectedVoice(e.target.value)}
-                    className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-orange-500 text-xs"
-                  >
-                    {availableVoices.map((voice) => (
-                      <option key={voice.name} value={voice.name}>
-                        {voice.name} ({voice.lang})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Kelajuan: {speechRate.toFixed(1)}x
-                  </label>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="2"
-                    step="0.1"
-                    value={speechRate}
-                    onChange={(e) => setSpeechRate(parseFloat(e.target.value))}
-                    className="w-full"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Nada: {speechPitch.toFixed(1)}
-                  </label>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="2"
-                    step="0.1"
-                    value={speechPitch}
-                    onChange={(e) => setSpeechPitch(parseFloat(e.target.value))}
-                    className="w-full"
-                  />
-                </div>
-              </div>
-
-              {/* Control Buttons */}
-              <div className="flex flex-col sm:flex-row gap-2">
-                <motion.button
-                  onClick={generateSpeech}
-                  disabled={!text.trim() || state.aiDemos.tts.isGenerating}
-                  className={`flex-1 py-2 px-3 rounded font-semibold transition-all text-sm ${
-                    text.trim() && !state.aiDemos.tts.isGenerating
-                      ? 'bg-orange-500 text-white hover:bg-orange-600'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                  whileHover={text.trim() && !state.aiDemos.tts.isGenerating ? { scale: 1.02 } : {}}
-                  whileTap={text.trim() && !state.aiDemos.tts.isGenerating ? { scale: 0.98 } : {}}
+            {/* Audio History & Status */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0">
+              {state.aiDemos.tts.audioFiles.length === 0 && !isPlaying && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center py-4"
                 >
-                  <div className="flex items-center justify-center space-x-1">
-                    <Play size={12} />
-                    <span>Jana Suara</span>
-                  </div>
-                </motion.button>
-
-                {isPlaying && (
-                  <motion.button
-                    onClick={speechSynthesis.paused ? resumeSpeech : pauseSpeech}
-                    className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm"
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <div className="flex items-center space-x-1">
-                      {speechSynthesis.paused ? <Play size={12} /> : <Pause size={12} />}
-                      <span>{speechSynthesis.paused ? 'Sambung' : 'Jeda'}</span>
-                    </div>
-                  </motion.button>
-                )}
-
-                {(isPlaying || speechSynthesis.speaking) && (
-                  <motion.button
-                    onClick={stopSpeech}
-                    className="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors text-sm"
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <Square size={12} />
-                      <span>Berhenti</span>
-                    </div>
-                  </motion.button>
-                )}
-              </div>
+                  <Volume2 className="mx-auto text-gray-400 mb-2" size={24} />
+                  <p className="text-gray-500 text-sm">
+                    Taip teks di bawah untuk menjana suara AI!
+                  </p>
+                </motion.div>
+              )}
 
               {/* Status Indicator */}
               <AnimatePresence>
@@ -424,53 +365,148 @@ const TTSDemoPage = () => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    className="bg-orange-50 border border-orange-200 rounded p-2"
+                    className="bg-orange-50 border border-orange-200 rounded-lg p-3"
                   >
                     <div className="flex items-center space-x-2">
                       <motion.div
-                        className="w-2 h-2 bg-orange-500 rounded-full"
+                        className="w-3 h-3 bg-orange-500 rounded-full"
                         animate={{ scale: [1, 1.2, 1] }}
                         transition={{ duration: 1, repeat: Infinity }}
                       />
-                      <span className="text-orange-800 font-medium text-xs">
+                      <span className="text-orange-800 font-medium text-sm">
                         Sedang memainkan audio...
                       </span>
+                      <div className="flex space-x-1 ml-auto">
+                        {isPlaying && (
+                          <motion.button
+                            onClick={speechSynthesis.paused ? resumeSpeech : pauseSpeech}
+                            className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-xs"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                          >
+                            {speechSynthesis.paused ? <Play size={10} /> : <Pause size={10} />}
+                          </motion.button>
+                        )}
+                        {(isPlaying || speechSynthesis.speaking) && (
+                          <motion.button
+                            onClick={stopSpeech}
+                            className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors text-xs"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                          >
+                            <Square size={10} />
+                          </motion.button>
+                        )}
+                      </div>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
 
               {/* Audio History */}
-              {state.aiDemos.tts.audioFiles.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-1 overflow-y-auto"
-                  style={{ maxHeight: '80px' }}
-                >
-                  <h3 className="font-semibold text-gray-800 text-xs">Sejarah Audio:</h3>
-                  <div className="space-y-1 overflow-y-auto">
-                    {state.aiDemos.tts.audioFiles.slice(-1).map((audio) => (
-                      <div key={audio.id} className="bg-gray-50 rounded p-1.5">
-                        <div className="flex justify-between items-start mb-0.5">
-                          <div className="flex-1">
-                            <p className="text-xs text-gray-800 line-clamp-1">
-                              {audio.text}
-                            </p>
-                            <div className="flex items-center space-x-1 mt-0.5 text-xs text-gray-500">
-                              <span>Suara: {audio.voice.split(' ')[0]}</span>
-                              <span>Kelajuan: {audio.rate}x</span>
-                            </div>
-                          </div>
-                          <span className="text-xs text-gray-500 ml-1">
-                            {audio.timestamp.toLocaleTimeString('ms-MY')}
-                          </span>
+              <AnimatePresence>
+                {state.aiDemos.tts.audioFiles.map((audio) => (
+                  <motion.div
+                    key={audio.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="bg-gray-50 rounded-lg p-3"
+                  >
+                    <div className="flex items-start space-x-2">
+                      <div className="w-6 h-6 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center flex-shrink-0">
+                        <Volume2 size={12} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-800 mb-1">{audio.text}</p>
+                        <div className="flex items-center space-x-2 text-xs text-gray-500">
+                          <span>Suara: {audio.voice}</span>
+                          <span>Kelajuan: {audio.rate}x</span>
+                          <span>{audio.timestamp.toLocaleTimeString('ms-MY')}</span>
                         </div>
                       </div>
-                    ))}
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+
+            {/* Voice Settings - Compact */}
+            {(speechRate !== 1 || speechPitch !== 1) && (
+              <div className="flex-shrink-0 border-t border-gray-200 p-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Kelajuan: {speechRate.toFixed(1)}x
+                    </label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2"
+                      step="0.1"
+                      value={speechRate}
+                      onChange={(e) => setSpeechRate(parseFloat(e.target.value))}
+                      className="w-full h-1"
+                    />
                   </div>
-                </motion.div>
-              )}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Nada: {speechPitch.toFixed(1)}
+                    </label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2"
+                      step="0.1"
+                      value={speechPitch}
+                      onChange={(e) => setSpeechPitch(parseFloat(e.target.value))}
+                      className="w-full h-1"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Input Form - Fixed at bottom */}
+            <div className="flex-shrink-0 border-t border-gray-200">
+              <form onSubmit={(e) => { e.preventDefault(); generateSpeech(); }} className="p-1.5">
+                <div className="flex space-x-1">
+                  <input
+                    type="text"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    placeholder="Taip teks untuk dijana suara..."
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-orange-500 text-xs"
+                    disabled={state.aiDemos.tts.isGenerating}
+                    maxLength={500}
+                  />
+                  <motion.button
+                    type="submit"
+                    disabled={!text.trim() || state.aiDemos.tts.isGenerating}
+                    className={`px-2 py-1 rounded transition-all text-xs ${
+                      text.trim() && !state.aiDemos.tts.isGenerating
+                        ? 'bg-orange-500 text-white hover:bg-orange-600'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                    whileHover={text.trim() && !state.aiDemos.tts.isGenerating ? { scale: 1.05 } : {}}
+                    whileTap={text.trim() && !state.aiDemos.tts.isGenerating ? { scale: 0.95 } : {}}
+                  >
+                    <Play size={12} />
+                  </motion.button>
+                </div>
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-xs text-gray-500">
+                    {text.length}/500 aksara
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSpeechRate(speechRate === 1 && speechPitch === 1 ? 1.2 : 1)}
+                    className="text-xs text-gray-500 hover:text-orange-500 transition-colors"
+                  >
+                    {speechRate === 1 && speechPitch === 1 ? 'Tetapan' : 'Reset'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </motion.div>

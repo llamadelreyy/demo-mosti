@@ -211,7 +211,7 @@ const WhisperDemoPage = () => {
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
               <motion.div
                 className="bg-purple-50 rounded-lg p-2"
                 whileHover={{ scale: 1.02 }}
@@ -220,10 +220,16 @@ const WhisperDemoPage = () => {
                   <Lightbulb className="text-purple-600" size={12} />
                   <h3 className="font-semibold text-purple-800 text-xs">Apa itu Whisper?</h3>
                 </div>
-                <p className="text-purple-700 text-xs">
-                  Model AI yang sangat tepat untuk menukar pertuturan kepada teks,
-                  menyokong pelbagai bahasa dan dialek.
+                <p className="text-purple-700 text-xs mb-2">
+                  Whisper adalah model AI canggih yang dibangunkan oleh OpenAI untuk menukar pertuturan kepada teks dengan ketepatan tinggi.
                 </p>
+                <div className="text-purple-700 text-xs space-y-1">
+                  <p><strong>Teknologi Asas:</strong></p>
+                  <p>• Transformer neural network architecture</p>
+                  <p>• Dilatih dengan 680,000 jam audio pelbagai bahasa</p>
+                  <p>• Menggunakan attention mechanism untuk fokus pada bahagian audio yang relevan</p>
+                  <p>• Pemprosesan mel-spectrogram untuk analisis frekuensi audio</p>
+                </div>
               </motion.div>
 
               <motion.div
@@ -232,14 +238,20 @@ const WhisperDemoPage = () => {
               >
                 <div className="flex items-center space-x-1 mb-1">
                   <Zap className="text-blue-600" size={12} />
-                  <h3 className="font-semibold text-blue-800 text-xs">Keupayaan</h3>
+                  <h3 className="font-semibold text-blue-800 text-xs">Keupayaan Whisper</h3>
                 </div>
-                <ul className="text-blue-700 text-xs space-y-0.5">
-                  <li>• Transkripsi suara real-time</li>
-                  <li>• Sokongan pelbagai bahasa</li>
-                  <li>• Ketepatan tinggi</li>
-                  <li>• Pengenalan bunyi latar</li>
-                </ul>
+                <div className="text-blue-700 text-xs space-y-1">
+                  <p><strong>Sokongan Bahasa:</strong></p>
+                  <p>• 99 bahasa termasuk Bahasa Malaysia</p>
+                  <p>• Pengenalan dialek dan loghat tempatan</p>
+                  <p>• Terjemahan automatik ke bahasa Inggeris</p>
+                  
+                  <p className="mt-2"><strong>Ciri-ciri Teknikal:</strong></p>
+                  <p>• Ketepatan hingga 95% dalam keadaan ideal</p>
+                  <p>• Pemprosesan audio real-time</p>
+                  <p>• Pengenalan bunyi latar dan pembersihan noise</p>
+                  <p>• Timestamp untuk setiap segmen perkataan</p>
+                </div>
               </motion.div>
 
               <motion.div
@@ -248,14 +260,80 @@ const WhisperDemoPage = () => {
               >
                 <div className="flex items-center space-x-1 mb-1">
                   <Volume2 className="text-green-600" size={12} />
-                  <h3 className="font-semibold text-green-800 text-xs">Tips Rakaman</h3>
+                  <h3 className="font-semibold text-green-800 text-xs">Cara Kerja Speech Recognition</h3>
                 </div>
-                <ul className="text-green-700 text-xs space-y-0.5">
-                  <li>• Bercakap dengan jelas</li>
-                  <li>• Elakkan bunyi bising</li>
-                  <li>• Jarak mikrofon yang sesuai</li>
-                  <li>• Rakam dalam persekitaran senyap</li>
-                </ul>
+                <div className="text-green-700 text-xs space-y-1">
+                  <p><strong>Proses Pemprosesan Audio:</strong></p>
+                  <p>1. <strong>Pengambilan Audio:</strong> Mikrofon menangkap gelombang bunyi</p>
+                  <p>2. <strong>Digitalisasi:</strong> Analog-to-digital conversion pada 16kHz</p>
+                  <p>3. <strong>Mel-Spectrogram:</strong> Transformasi ke domain frekuensi</p>
+                  <p>4. <strong>Feature Extraction:</strong> Neural network mengekstrak ciri audio</p>
+                  <p>5. <strong>Sequence Modeling:</strong> Transformer memetakan audio ke teks</p>
+                  <p>6. <strong>Language Modeling:</strong> Konteks linguistik untuk ketepatan</p>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="bg-orange-50 rounded-lg p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <Lightbulb className="text-orange-600" size={12} />
+                  <h3 className="font-semibold text-orange-800 text-xs">Aplikasi Dunia Sebenar</h3>
+                </div>
+                <div className="text-orange-700 text-xs space-y-1">
+                  <p><strong>Industri & Kegunaan:</strong></p>
+                  <p>• <strong>Perubatan:</strong> Transkripsi nota doktor dan laporan</p>
+                  <p>• <strong>Pendidikan:</strong> Subtitle kuliah dan bahan pembelajaran</p>
+                  <p>• <strong>Media:</strong> Subtitle video dan podcast</p>
+                  <p>• <strong>Perniagaan:</strong> Minit mesyuarat dan panggilan</p>
+                  <p>• <strong>Aksesibiliti:</strong> Bantuan untuk OKU pendengaran</p>
+                  <p>• <strong>Terjemahan:</strong> Komunikasi antara bahasa</p>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="bg-red-50 rounded-lg p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <Volume2 className="text-red-600" size={12} />
+                  <h3 className="font-semibold text-red-800 text-xs">Tips Optimum untuk Transkripsi</h3>
+                </div>
+                <div className="text-red-700 text-xs space-y-1">
+                  <p><strong>Persekitaran Rakaman:</strong></p>
+                  <p>• Bilik senyap dengan minimum echo</p>
+                  <p>• Jarak mikrofon 15-30cm dari mulut</p>
+                  <p>• Elakkan bunyi latar seperti kipas atau traffic</p>
+                  
+                  <p className="mt-2"><strong>Teknik Pertuturan:</strong></p>
+                  <p>• Bercakap dengan kelajuan sederhana (150-180 wpm)</p>
+                  <p>• Sebutan yang jelas dan tidak bergumam</p>
+                  <p>• Pause sebentar antara ayat</p>
+                  <p>• Elakkan "um", "ah" yang berlebihan</p>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="bg-indigo-50 rounded-lg p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <Zap className="text-indigo-600" size={12} />
+                  <h3 className="font-semibold text-indigo-800 text-xs">Ketepatan & Limitasi</h3>
+                </div>
+                <div className="text-indigo-700 text-xs space-y-1">
+                  <p><strong>Faktor Ketepatan:</strong></p>
+                  <p>• Kualiti audio: 95% (studio) vs 70% (bising)</p>
+                  <p>• Bahasa: Inggeris (98%) vs bahasa lain (85-95%)</p>
+                  <p>• Dialek: Standard (95%) vs dialek kuat (80%)</p>
+                  
+                  <p className="mt-2"><strong>Cabaran Teknikal:</strong></p>
+                  <p>• Pertuturan pantas atau bergumam</p>
+                  <p>• Istilah teknikal atau nama khas</p>
+                  <p>• Audio berkualiti rendah atau terdistorsi</p>
+                  <p>• Pelbagai penutur dalam satu rakaman</p>
+                </div>
               </motion.div>
             </div>
           </div>

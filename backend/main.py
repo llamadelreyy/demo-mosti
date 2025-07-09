@@ -85,7 +85,7 @@ class TTSResponse(BaseModel):
 
 # Initialize models
 async def init_whisper_model():
-    """Initialize Whisper model on available GPU"""
+    """Initialize Whisper model on GPU 1"""
     global whisper_model
     try:
         with gpu_manager.get_gpu_1_lock():
@@ -97,17 +97,27 @@ async def init_whisper_model():
                 if gpu_count > 1:
                     device = "cuda:1"
                     logger.info("Loading Whisper model on GPU 1...")
+                    # Set GPU 1 for this process
+                    torch.cuda.set_device(1)
                 else:
                     device = "cuda:0"
                     logger.info("Only 1 GPU detected by PyTorch, loading Whisper model on GPU 0...")
+                    torch.cuda.set_device(0)
             else:
                 device = "cpu"
                 logger.info("CUDA not available, loading Whisper model on CPU...")
             
             whisper_model = whisper.load_model("base", device=device)
             logger.info(f"Whisper model loaded successfully on {device}")
+            
+            # Verify model is loaded and on correct device
+            logger.info("Whisper model initialization complete")
+            if hasattr(whisper_model, 'device'):
+                logger.info(f"Whisper model device: {whisper_model.device}")
+            
     except Exception as e:
         logger.error(f"Failed to load Whisper model: {e}")
+        whisper_model = None
         raise
 
 async def init_tts_model():
@@ -115,23 +125,63 @@ async def init_tts_model():
     global tts_model
     try:
         logger.info("Initializing pyttsx3 TTS engine...")
-        tts_model = pyttsx3.init()
+        
+        # Initialize with specific driver for better compatibility
+        try:
+            tts_model = pyttsx3.init(driverName='espeak')
+            logger.info("TTS initialized with espeak driver")
+        except:
+            try:
+                tts_model = pyttsx3.init()
+                logger.info("TTS initialized with default driver")
+            except Exception as e:
+                logger.error(f"Failed to initialize TTS with any driver: {e}")
+                raise
         
         # Set properties for better quality
-        voices = tts_model.getProperty('voices')
-        if voices:
-            # Try to find a female voice or use the first available
-            for voice in voices:
-                if 'female' in voice.name.lower() or 'woman' in voice.name.lower():
-                    tts_model.setProperty('voice', voice.id)
-                    break
+        try:
+            voices = tts_model.getProperty('voices')
+            logger.info(f"Available TTS voices: {len(voices) if voices else 0}")
+            
+            if voices:
+                # Try to find a female voice or use the first available
+                selected_voice = None
+                for voice in voices:
+                    logger.info(f"Voice: {voice.name} - {voice.id}")
+                    if 'female' in voice.name.lower() or 'woman' in voice.name.lower():
+                        selected_voice = voice
+                        break
+                
+                if selected_voice:
+                    tts_model.setProperty('voice', selected_voice.id)
+                    logger.info(f"Selected voice: {selected_voice.name}")
+                else:
+                    tts_model.setProperty('voice', voices[0].id)
+                    logger.info(f"Using default voice: {voices[0].name}")
             else:
-                tts_model.setProperty('voice', voices[0].id)
+                logger.warning("No TTS voices available")
+        except Exception as e:
+            logger.warning(f"Could not set TTS voice: {e}")
         
-        tts_model.setProperty('rate', 150)  # Speed of speech
-        tts_model.setProperty('volume', 0.9)  # Volume level (0.0 to 1.0)
+        # Set speech properties
+        try:
+            tts_model.setProperty('rate', 150)  # Speed of speech
+            tts_model.setProperty('volume', 0.9)  # Volume level (0.0 to 1.0)
+            logger.info("TTS properties set: rate=150, volume=0.9")
+        except Exception as e:
+            logger.warning(f"Could not set TTS properties: {e}")
         
         logger.info("pyttsx3 TTS engine initialized successfully")
+        
+        # Test TTS functionality
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as test_file:
+                tts_model.save_to_file("Test", test_file.name)
+                tts_model.runAndWait()
+                logger.info("TTS test completed successfully")
+        except Exception as e:
+            logger.warning(f"TTS test failed: {e}")
+            
     except Exception as e:
         logger.error(f"Failed to initialize TTS engine: {e}")
         raise
@@ -140,9 +190,6 @@ async def init_ollama():
     """Initialize Ollama models on GPU 0"""
     try:
         logger.info("Initializing Ollama models on GPU 0...")
-        
-        # Set CUDA_VISIBLE_DEVICES for Ollama to use GPU 0
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
         
         # Pull models if not exists
         try:
@@ -176,13 +223,19 @@ def whisper_worker():
             
             with gpu_manager.get_gpu_1_lock():
                 try:
+                    logger.info(f"Processing audio file: {audio_file}")
+                    if whisper_model is None:
+                        raise Exception("Whisper model not loaded")
+                    
                     result = whisper_model.transcribe(audio_file)
+                    logger.info(f"Transcription successful: {result.get('text', '')[:50]}...")
                     result_queue.put({
                         "text": result["text"],
                         "duration": result.get("duration", 0),
                         "success": True
                     })
                 except Exception as e:
+                    logger.error(f"Whisper transcription error: {str(e)}")
                     result_queue.put({
                         "error": str(e),
                         "success": False
@@ -206,28 +259,79 @@ def tts_worker():
             text, voice, speed, result_queue = task
             
             try:
-                # Generate audio using pyttsx3
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-                    # Set speed (pyttsx3 uses rate)
-                    rate = int(150 * speed)  # Base rate 150, adjust by speed factor
-                    tts_model.setProperty('rate', rate)
+                logger.info(f"TTS processing text: {text[:50]}...")
+                
+                # Check if TTS model is available
+                if tts_model is None:
+                    raise Exception("TTS model not initialized")
+                
+                # Generate audio using direct memory approach
+                # Set speed (pyttsx3 uses rate)
+                rate = int(150 * speed)  # Base rate 150, adjust by speed factor
+                tts_model.setProperty('rate', rate)
+                
+                # Try using espeak directly for faster generation
+                try:
+                    import subprocess
                     
-                    # Save to file
-                    tts_model.save_to_file(text, tmp_file.name)
-                    tts_model.runAndWait()
+                    # Map voice selection to espeak voices
+                    voice_map = {
+                        'female': 'en+f3',      # Female English voice
+                        'male': 'en+m1',        # Male English voice
+                        'female_us': 'en-us+f3', # Female US English
+                        'male_us': 'en-us+m1',   # Male US English
+                        'default': 'en+f3'      # Default to female
+                    }
                     
-                    # Read and encode audio
-                    with open(tmp_file.name, "rb") as audio_file:
-                        audio_data = audio_file.read()
-                        audio_base64 = base64.b64encode(audio_data).decode()
+                    # Select voice based on request
+                    espeak_voice = voice_map.get(voice, 'en+f3')
+                    
+                    # Use espeak for immediate audio generation
+                    cmd = [
+                        'espeak',
+                        '-s', str(rate),        # Speed
+                        '-v', espeak_voice,     # Voice selection
+                        '-a', '200',            # Amplitude (volume)
+                        '--stdout',             # Output to stdout
+                        text
+                    ]
+                    
+                    result = subprocess.run(cmd, capture_output=True, check=True)
+                    audio_data = result.stdout
+                    
+                    if len(audio_data) == 0:
+                        raise Exception("espeak generated empty audio")
+                    
+                    # Encode to base64 for transmission
+                    audio_base64 = base64.b64encode(audio_data).decode()
+                    logger.info(f"TTS audio generated with espeak voice '{espeak_voice}', size: {len(audio_data)} bytes")
+                    
+                except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                    logger.warning(f"espeak failed: {e}, falling back to pyttsx3")
+                    
+                    # Fallback to pyttsx3 with minimal file operations
+                    with tempfile.NamedTemporaryFile(suffix=".wav") as tmp_file:
+                        tts_model.save_to_file(text, tmp_file.name)
+                        tts_model.runAndWait()
                         
-                    os.unlink(tmp_file.name)
+                        # Read the generated file
+                        with open(tmp_file.name, "rb") as f:
+                            audio_data = f.read()
+                        
+                        if len(audio_data) == 0:
+                            raise Exception("pyttsx3 generated empty audio")
+                        
+                        audio_base64 = base64.b64encode(audio_data).decode()
+                        logger.info(f"TTS audio generated with pyttsx3, size: {len(audio_data)} bytes")
+                
+                result_queue.put({
+                    "audio_base64": audio_base64,
+                    "success": True
+                })
+                logger.info("TTS processing completed successfully")
                     
-                    result_queue.put({
-                        "audio_base64": audio_base64,
-                        "success": True
-                    })
             except Exception as e:
+                logger.error(f"TTS processing error: {str(e)}")
                 result_queue.put({
                     "error": str(e),
                     "success": False
@@ -466,6 +570,44 @@ async def tts_generate(request: TTSRequest):
     except Exception as e:
         logger.error(f"TTS error: {e}")
         raise HTTPException(status_code=500, detail=f"TTS processing failed: {str(e)}")
+
+# TTS voices endpoint
+@app.get("/api/tts/voices")
+async def get_tts_voices():
+    """Get available TTS voices"""
+    return {
+        "voices": [
+            {
+                "id": "female",
+                "name": "Female English",
+                "language": "en",
+                "gender": "female",
+                "description": "Clear female English voice"
+            },
+            {
+                "id": "male",
+                "name": "Male English",
+                "language": "en",
+                "gender": "male",
+                "description": "Clear male English voice"
+            },
+            {
+                "id": "female_us",
+                "name": "Female US English",
+                "language": "en-us",
+                "gender": "female",
+                "description": "American female English voice"
+            },
+            {
+                "id": "male_us",
+                "name": "Male US English",
+                "language": "en-us",
+                "gender": "male",
+                "description": "American male English voice"
+            }
+        ],
+        "default": "female"
+    }
 
 # Status endpoint
 @app.get("/api/status")

@@ -66,7 +66,7 @@ class APIService {
   }
 
   // TTS (Text-to-Speech) API
-  async synthesizeSpeech(text, language = 'ms') {
+  async synthesizeSpeech(text, voice = 'female', speed = 1.0) {
     const response = await fetch(`${this.baseURL}/api/tts`, {
       method: 'POST',
       headers: {
@@ -74,7 +74,9 @@ class APIService {
       },
       body: JSON.stringify({
         text,
-        language,
+        voice,
+        speed,
+        user_name: 'User'
       }),
     });
 
@@ -82,8 +84,22 @@ class APIService {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    return response.blob(); // Return audio blob
+    // Get JSON response with base64 audio
+    const data = await response.json();
+    
+    // Convert base64 to blob
+    const audioBase64 = data.audio_base64;
+    const binaryString = atob(audioBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Create blob with proper MIME type for WAV audio
+    const audioBlob = new Blob([bytes], { type: 'audio/wav' });
+    return audioBlob;
   }
+
 
   // Health check
   async healthCheck() {

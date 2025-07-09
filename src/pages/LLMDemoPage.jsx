@@ -104,39 +104,94 @@ const LLMDemoPage = () => {
               </div>
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-2 overflow-y-auto">
               <motion.div
-                className="bg-blue-50 rounded p-1.5"
+                className="bg-blue-50 rounded p-2"
                 whileHover={{ scale: 1.02 }}
               >
-                <div className="flex items-center space-x-1 mb-0.5">
-                  <Lightbulb className="text-blue-600" size={10} />
+                <div className="flex items-center space-x-1 mb-1">
+                  <Lightbulb className="text-blue-600" size={12} />
                   <h3 className="font-semibold text-blue-800 text-xs">Apa itu LLM?</h3>
                 </div>
-                <p className="text-blue-700 text-xs">
-                  Model AI untuk memahami dan menjana bahasa manusia.
+                <p className="text-blue-700 text-xs leading-relaxed mb-2">
+                  Large Language Model (LLM) adalah model kecerdasan buatan yang dilatih menggunakan sejumlah besar data teks untuk memahami dan menjana bahasa manusia dengan cara yang sangat canggih.
+                </p>
+                <p className="text-blue-700 text-xs leading-relaxed">
+                  Model ini menggunakan arsitektur transformer yang membolehkannya memproses konteks yang panjang dan menghasilkan respons yang koheren dan relevan.
                 </p>
               </motion.div>
 
               <motion.div
-                className="bg-purple-50 rounded p-1.5"
+                className="bg-green-50 rounded p-2"
                 whileHover={{ scale: 1.02 }}
               >
-                <div className="flex items-center space-x-1 mb-0.5">
-                  <MessageSquare className="text-purple-600" size={10} />
+                <div className="flex items-center space-x-1 mb-1">
+                  <Zap className="text-green-600" size={12} />
+                  <h3 className="font-semibold text-green-800 text-xs">Keupayaan LLM</h3>
+                </div>
+                <ul className="text-green-700 text-xs space-y-1">
+                  <li>• Menjawab soalan kompleks dengan tepat</li>
+                  <li>• Menulis kandungan kreatif dan informatif</li>
+                  <li>• Menterjemah antara pelbagai bahasa</li>
+                  <li>• Menganalisis dan meringkaskan teks</li>
+                  <li>• Membantu dalam penyelesaian masalah</li>
+                  <li>• Berkomunikasi dalam pelbagai gaya</li>
+                </ul>
+              </motion.div>
+
+              <motion.div
+                className="bg-yellow-50 rounded p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <Brain className="text-yellow-600" size={12} />
+                  <h3 className="font-semibold text-yellow-800 text-xs">Cara Kerja</h3>
+                </div>
+                <p className="text-yellow-700 text-xs leading-relaxed mb-1">
+                  LLM menggunakan mekanisme "attention" untuk memahami hubungan antara kata-kata dalam konteks. Model ini dilatih dengan teknik "next token prediction" di mana ia belajar meramalkan kata seterusnya dalam urutan.
+                </p>
+                <p className="text-yellow-700 text-xs leading-relaxed">
+                  Proses latihan melibatkan jutaan parameter yang diselaraskan melalui pembelajaran mendalam untuk menghasilkan output yang bermakna.
+                </p>
+              </motion.div>
+
+              <motion.div
+                className="bg-purple-50 rounded p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <MessageSquare className="text-purple-600" size={12} />
                   <h3 className="font-semibold text-purple-800 text-xs">Cuba Tanya</h3>
                 </div>
-                <div className="space-y-0.5">
-                  {suggestedQuestions.slice(0, 2).map((question, index) => (
+                <div className="space-y-1">
+                  {suggestedQuestions.map((question, index) => (
                     <button
                       key={index}
                       onClick={() => handleSuggestedQuestion(question)}
-                      className="w-full text-left text-xs bg-white border border-purple-200 rounded p-1 hover:bg-purple-100 transition-colors"
+                      className="w-full text-left text-xs bg-white border border-purple-200 rounded p-1.5 hover:bg-purple-100 transition-colors"
                     >
                       {question}
                     </button>
                   ))}
                 </div>
+              </motion.div>
+
+              <motion.div
+                className="bg-indigo-50 rounded p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <Brain className="text-indigo-600" size={12} />
+                  <h3 className="font-semibold text-indigo-800 text-xs">Aplikasi Dunia Sebenar</h3>
+                </div>
+                <ul className="text-indigo-700 text-xs space-y-1">
+                  <li>• Pembantu maya dan chatbot</li>
+                  <li>• Sistem sokongan pelanggan</li>
+                  <li>• Alat penulisan dan penyuntingan</li>
+                  <li>• Analisis sentimen dan data</li>
+                  <li>• Pendidikan dan latihan</li>
+                  <li>• Penyelidikan dan pembangunan</li>
+                </ul>
               </motion.div>
             </div>
           </div>

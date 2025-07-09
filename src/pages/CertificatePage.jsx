@@ -1,10 +1,11 @@
 import React, { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Award, Download, QrCode, Share2, Calendar, User, Trophy, Star } from 'lucide-react';
+import { Award, QrCode, Share2, Calendar, User } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import QRCode from 'qrcode';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import logoImage from '../assets/logo.png';
 
 const CertificatePage = () => {
   const { state } = useApp();
@@ -18,26 +19,6 @@ const CertificatePage = () => {
     day: 'numeric'
   });
 
-  const score = state.quiz.score;
-  const totalQuestions = 10;
-  const percentage = Math.round((score / totalQuestions) * 100);
-
-  const getGrade = () => {
-    if (percentage >= 90) return 'A+';
-    if (percentage >= 80) return 'A';
-    if (percentage >= 70) return 'B';
-    if (percentage >= 60) return 'C';
-    if (percentage >= 50) return 'D';
-    return 'F';
-  };
-
-  const getAchievementLevel = () => {
-    if (percentage >= 90) return 'Cemerlang';
-    if (percentage >= 80) return 'Sangat Baik';
-    if (percentage >= 70) return 'Baik';
-    if (percentage >= 60) return 'Sederhana';
-    return 'Perlu Penambahbaikan';
-  };
 
   // Generate QR Code
   React.useEffect(() => {
@@ -45,10 +26,6 @@ const CertificatePage = () => {
       try {
         const certificateData = {
           name: state.user.name,
-          score: score,
-          total: totalQuestions,
-          percentage: percentage,
-          grade: getGrade(),
           date: currentDate,
           id: `MOSTI-AI-${Date.now()}`
         };
@@ -70,7 +47,7 @@ const CertificatePage = () => {
     };
 
     generateQRCode();
-  }, [state.user.name, score, percentage, currentDate]);
+  }, [state.user.name, currentDate]);
 
   const downloadPDF = async () => {
     if (!certificateRef.current) return;
@@ -86,12 +63,12 @@ const CertificatePage = () => {
 
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
-        orientation: 'landscape',
+        orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       });
 
-      const imgWidth = 297; // A4 landscape width
+      const imgWidth = 210; // A4 portrait width
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
       pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
@@ -109,7 +86,7 @@ const CertificatePage = () => {
       try {
         await navigator.share({
           title: 'Sijil Demo AI - MOSTI',
-          text: `Saya telah menyelesaikan Demo Stack Model AI dengan markah ${score}/${totalQuestions} (${percentage}%)!`,
+          text: `Saya telah menyelesaikan Demo Stack Model AI!`,
           url: window.location.href
         });
       } catch (error) {
@@ -117,15 +94,15 @@ const CertificatePage = () => {
       }
     } else {
       // Fallback for browsers that don't support Web Share API
-      const text = `Saya telah menyelesaikan Demo Stack Model AI dengan markah ${score}/${totalQuestions} (${percentage}%)!`;
+      const text = `Saya telah menyelesaikan Demo Stack Model AI!`;
       navigator.clipboard.writeText(text);
       alert('Teks telah disalin ke clipboard!');
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <div className="flex-1 max-w-6xl mx-auto p-3 overflow-y-auto">
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-full mx-auto p-3 min-h-full">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -158,113 +135,63 @@ const CertificatePage = () => {
         >
           <div
             ref={certificateRef}
-            className="bg-white border-4 border-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-4 shadow-lg"
+            className="relative p-20 mx-auto"
             style={{
-              background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-              border: '4px solid',
-              borderImage: 'linear-gradient(135deg, #3b82f6, #8b5cf6) 1'
+              background: 'linear-gradient(135deg, #fefcf3 0%, #f5f1e8 100%)',
+              width: '210mm',
+              minHeight: '297mm',
+              fontFamily: 'Inter, sans-serif'
             }}
           >
+            {/* Decorative cursive borders */}
+            <div className="absolute inset-8 border-2 border-dashed border-amber-300 rounded-lg opacity-30"></div>
+            <div className="absolute top-12 left-12 w-8 h-8 border-l-2 border-t-2 border-amber-400 rounded-tl-lg"></div>
+            <div className="absolute top-12 right-12 w-8 h-8 border-r-2 border-t-2 border-amber-400 rounded-tr-lg"></div>
+            <div className="absolute bottom-12 left-12 w-8 h-8 border-l-2 border-b-2 border-amber-400 rounded-bl-lg"></div>
+            <div className="absolute bottom-12 right-12 w-8 h-8 border-r-2 border-b-2 border-amber-400 rounded-br-lg"></div>
             {/* Certificate Header */}
-            <div className="text-center mb-3">
-              <div className="flex items-center justify-center space-x-2 mb-2">
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                  <Trophy className="text-white" size={16} />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-gray-800">MOSTI</h2>
-                  <p className="text-xs text-gray-600">Kementerian Sains, Teknologi dan Inovasi</p>
-                </div>
+            <div className="text-center mb-12">
+              <div className="flex items-center justify-center mb-6">
+                <img src={logoImage} alt="MOSTI Logo" className="w-24 h-24 object-contain" />
               </div>
               
-              <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 mb-2">
+              <h1 className="text-4xl font-bold text-amber-800 mb-4">
                 SIJIL PENCAPAIAN
               </h1>
               
-              <div className="w-16 h-0.5 bg-gradient-to-r from-blue-500 to-purple-600 mx-auto rounded-full"></div>
+              <div className="w-32 h-1 bg-gradient-to-r from-amber-600 to-amber-400 mx-auto rounded-full"></div>
             </div>
 
             {/* Certificate Body */}
-            <div className="text-center mb-3">
-              <p className="text-xs text-gray-700 mb-2">
+            <div className="text-center mb-16 mt-32">
+              <p className="text-lg text-amber-800 mb-16">
                 Dengan ini disahkan bahawa
               </p>
               
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded p-2 mb-2">
-                <h2 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
-                  {state.user.name}
+              <div className="mb-16">
+                <h2 className="text-3xl font-bold text-amber-800">
+                  {state.user.name || 'Nama Peserta'}
                 </h2>
               </div>
               
-              <p className="text-xs text-gray-700 mb-2">
+              <p className="text-lg text-amber-800 mb-16">
                 telah berjaya menyelesaikan
               </p>
               
-              <h3 className="text-sm font-bold text-gray-800 mb-2">
+              <h3 className="text-2xl font-bold text-amber-800 mb-16">
                 Demo Stack Model Kecerdasan Buatan (AI)
               </h3>
               
-              <p className="text-xs text-gray-700 mb-3">
+              <p className="text-base text-amber-700 mb-20 leading-relaxed max-w-2xl mx-auto">
                 dan telah menunjukkan pemahaman yang baik tentang teknologi AI termasuk
                 Large Language Models (LLM), Vision Language Models (VLM),
                 Speech-to-Text (Whisper), dan Text-to-Speech (TTS)
               </p>
             </div>
 
-            {/* Achievement Details */}
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              <div className="text-center bg-white rounded p-2 shadow">
-                <Star className="mx-auto text-yellow-500 mb-1" size={12} />
-                <div className="text-sm font-bold text-gray-800">{score}/{totalQuestions}</div>
-                <p className="text-xs text-gray-600">Markah Kuiz</p>
-              </div>
-              
-              <div className="text-center bg-white rounded p-2 shadow">
-                <Trophy className="mx-auto text-blue-500 mb-1" size={12} />
-                <div className="text-sm font-bold text-gray-800">{percentage}%</div>
-                <p className="text-xs text-gray-600">Peratusan</p>
-              </div>
-              
-              <div className="text-center bg-white rounded p-2 shadow">
-                <Award className="mx-auto text-purple-500 mb-1" size={12} />
-                <div className="text-sm font-bold text-gray-800">{getGrade()}</div>
-                <p className="text-xs text-gray-600">Gred</p>
-              </div>
-            </div>
 
-            {/* Achievement Level */}
-            <div className="text-center mb-3">
-              <div className="inline-block bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full font-bold text-xs">
-                Tahap Pencapaian: {getAchievementLevel()}
-              </div>
-            </div>
-
-            {/* Certificate Footer */}
-            <div className="flex justify-between items-end text-xs">
-              <div className="text-left">
-                <div className="flex items-center space-x-1 mb-1">
-                  <Calendar className="text-gray-500" size={10} />
-                  <span className="text-gray-600">Tarikh: {currentDate}</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <User className="text-gray-500" size={10} />
-                  <span className="text-gray-600">ID: MOSTI-AI-{Date.now().toString().slice(-6)}</span>
-                </div>
-              </div>
-              
-              {qrCodeUrl && (
-                <div className="text-center">
-                  <img src={qrCodeUrl} alt="QR Code" className="w-12 h-12 mx-auto mb-1" />
-                  <p className="text-xs text-gray-500">Imbas untuk pengesahan</p>
-                </div>
-              )}
-              
-              <div className="text-right">
-                <div className="border-t border-gray-400 pt-1 w-16">
-                  <p className="text-xs font-semibold text-gray-700">Pengarah</p>
-                  <p className="text-xs text-gray-600">MOSTI</p>
-                </div>
-              </div>
+            {/* Certificate Footer - Empty for clean look */}
+            <div className="mt-auto">
             </div>
           </div>
         </motion.div>
@@ -274,26 +201,11 @@ const CertificatePage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="flex flex-col sm:flex-row gap-2 justify-center items-center mb-3"
+          className="flex justify-center items-center mb-3"
         >
           <motion.button
-            onClick={downloadPDF}
-            disabled={isGenerating}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-semibold text-sm shadow transition-all ${
-              isGenerating
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:shadow-lg'
-            }`}
-            whileHover={!isGenerating ? { scale: 1.05 } : {}}
-            whileTap={!isGenerating ? { scale: 0.95 } : {}}
-          >
-            <Download size={16} />
-            <span>{isGenerating ? 'Menjana PDF...' : 'Muat Turun PDF'}</span>
-          </motion.button>
-          
-          <motion.button
             onClick={shareResult}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg font-semibold text-sm shadow hover:bg-green-600 transition-all"
+            className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-white rounded-lg font-semibold text-sm shadow-lg hover:shadow-xl transition-all"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
@@ -308,17 +220,17 @@ const CertificatePage = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.7 }}
-            className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3"
+            className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-3"
           >
-            <div className="flex items-start space-x-2">
-              <QrCode className="text-blue-600 flex-shrink-0 mt-1" size={16} />
-              <div>
-                <h3 className="font-semibold text-blue-800 mb-1 text-sm">Kod QR Pengesahan</h3>
-                <p className="text-blue-700 text-xs">
-                  Kod QR di atas mengandungi maklumat pengesahan sijil anda. Ia boleh diimbas
-                  untuk mengesahkan kesahihan sijil dan melihat butiran pencapaian anda.
-                </p>
+            <div className="flex flex-col items-center space-y-3">
+              <div className="text-center">
+                <img src={qrCodeUrl} alt="QR Code" className="w-24 h-24 mx-auto mb-2" />
+                <h3 className="font-semibold text-amber-800 mb-1 text-sm">Kod QR Pengesahan</h3>
               </div>
+              <p className="text-amber-700 text-xs text-center">
+                Kod QR di atas mengandungi maklumat pengesahan sijil anda. Ia boleh diimbas
+                untuk mengesahkan kesahihan sijil dan melihat butiran pencapaian anda.
+              </p>
             </div>
           </motion.div>
         )}
@@ -328,13 +240,14 @@ const CertificatePage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.9 }}
-          className="bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg p-3 text-center"
+          className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-lg p-4 text-center"
+          style={{ fontFamily: 'Inter, sans-serif' }}
         >
-          <Trophy className="mx-auto text-yellow-500 mb-2" size={20} />
-          <h3 className="text-sm font-semibold text-gray-800 mb-1">
+          <Award className="mx-auto text-amber-500 mb-3" size={24} />
+          <h3 className="text-lg font-semibold text-amber-800 mb-2">
             Tahniah atas Pencapaian Anda! 🎉
           </h3>
-          <p className="text-xs text-gray-600">
+          <p className="text-sm text-amber-700">
             Anda telah berjaya menyelesaikan Demo Stack Model AI dan memperoleh pengetahuan
             berharga tentang teknologi kecerdasan buatan. Teruskan pembelajaran dan jelajahi
             dunia AI yang menarik ini!

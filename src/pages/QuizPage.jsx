@@ -262,26 +262,25 @@ const QuizPage = () => {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -50 }}
           transition={{ duration: 0.3 }}
-          className="bg-white rounded shadow-sm p-2 mb-2 flex-1 overflow-y-auto"
-          style={{ maxHeight: '300px' }}
+          className="bg-white rounded shadow-sm p-4 mb-4 flex-1 overflow-y-auto"
         >
-          <div className="mb-2">
-            <div className="flex items-start space-x-1">
-              <div className="w-4 h-4 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center font-semibold text-xs">
+          <div className="mb-6">
+            <div className="flex items-start space-x-3">
+              <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center font-semibold text-sm">
                 {currentQuestion.id}
               </div>
-              <h2 className="text-sm font-semibold text-gray-800 leading-snug">
+              <h2 className="text-lg font-semibold text-gray-800 leading-relaxed">
                 {currentQuestion.question}
               </h2>
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-3">
             {currentQuestion.options.map((option, index) => (
               <motion.button
                 key={index}
                 onClick={() => handleAnswerSelect(index)}
-                className={`w-full text-left p-2 rounded border transition-all text-xs ${
+                className={`w-full text-left p-4 rounded-lg border transition-all text-sm ${
                   selectedAnswer === index
                     ? 'border-purple-500 bg-purple-50 text-purple-800'
                     : 'border-gray-200 hover:border-purple-300 hover:bg-purple-25'
@@ -289,8 +288,8 @@ const QuizPage = () => {
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
               >
-                <div className="flex items-center space-x-1">
-                  <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
+                <div className="flex items-center space-x-3">
+                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
                     selectedAnswer === index
                       ? 'border-purple-500 bg-purple-500'
                       : 'border-gray-300'
@@ -299,12 +298,12 @@ const QuizPage = () => {
                       <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        className="w-1.5 h-1.5 bg-white rounded-full"
+                        className="w-2.5 h-2.5 bg-white rounded-full"
                       />
                     )}
                   </div>
-                  <span className="font-medium text-xs">{String.fromCharCode(65 + index)}.</span>
-                  <span>{option}</span>
+                  <span className="font-medium text-sm">{String.fromCharCode(65 + index)}.</span>
+                  <span className="leading-relaxed">{option}</span>
                 </div>
               </motion.button>
             ))}

@@ -192,39 +192,111 @@ const VLMDemoPage = () => {
               </div>
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-2 overflow-y-auto">
               <motion.div
-                className="bg-green-50 rounded p-1.5"
+                className="bg-green-50 rounded p-2"
                 whileHover={{ scale: 1.02 }}
               >
-                <div className="flex items-center space-x-1 mb-0.5">
-                  <Lightbulb className="text-green-600" size={10} />
+                <div className="flex items-center space-x-1 mb-1">
+                  <Lightbulb className="text-green-600" size={12} />
                   <h3 className="font-semibold text-green-800 text-xs">Apa itu VLM?</h3>
                 </div>
-                <p className="text-green-700 text-xs">
-                  Model AI untuk "melihat" dan memahami imej.
+                <p className="text-green-700 text-xs leading-relaxed mb-2">
+                  Vision Language Model (VLM) adalah model AI yang menggabungkan kemampuan pemprosesan visual dan bahasa, membolehkan sistem memahami dan menerangkan kandungan imej dalam bentuk teks.
+                </p>
+                <p className="text-green-700 text-xs leading-relaxed">
+                  Model ini menggunakan arsitektur multimodal yang dapat menganalisis imej dan menjana deskripsi yang tepat dan bermakna.
                 </p>
               </motion.div>
 
               <motion.div
-                className="bg-purple-50 rounded p-1.5"
+                className="bg-blue-50 rounded p-2"
                 whileHover={{ scale: 1.02 }}
               >
-                <div className="flex items-center space-x-1 mb-0.5">
-                  <MessageSquare className="text-purple-600" size={10} />
+                <div className="flex items-center space-x-1 mb-1">
+                  <Eye className="text-blue-600" size={12} />
+                  <h3 className="font-semibold text-blue-800 text-xs">Keupayaan Penglihatan</h3>
+                </div>
+                <ul className="text-blue-700 text-xs space-y-1">
+                  <li>• Mengenal objek dan entiti dalam imej</li>
+                  <li>• Menganalisis komposisi dan layout</li>
+                  <li>• Mengesan warna, bentuk, dan tekstur</li>
+                  <li>• Memahami konteks dan situasi</li>
+                  <li>• Membaca teks dalam imej (OCR)</li>
+                  <li>• Mengira bilangan objek</li>
+                </ul>
+              </motion.div>
+
+              <motion.div
+                className="bg-yellow-50 rounded p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <ImageIcon className="text-yellow-600" size={12} />
+                  <h3 className="font-semibold text-yellow-800 text-xs">Teknologi Asas</h3>
+                </div>
+                <p className="text-yellow-700 text-xs leading-relaxed mb-1">
+                  VLM menggunakan Convolutional Neural Networks (CNN) untuk ekstraksi ciri visual dan transformer untuk pemprosesan bahasa. Kedua-dua komponen ini disepadukan melalui lapisan attention.
+                </p>
+                <p className="text-yellow-700 text-xs leading-relaxed">
+                  Model dilatih menggunakan jutaan pasangan imej-teks untuk mempelajari hubungan antara elemen visual dan deskripsi linguistik.
+                </p>
+              </motion.div>
+
+              <motion.div
+                className="bg-purple-50 rounded p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <MessageSquare className="text-purple-600" size={12} />
                   <h3 className="font-semibold text-purple-800 text-xs">Cuba Tanya</h3>
                 </div>
-                <div className="space-y-0.5">
-                  {suggestedQuestions.slice(0, 2).map((question, index) => (
+                <div className="space-y-1">
+                  {suggestedQuestions.map((question, index) => (
                     <button
                       key={index}
                       onClick={() => handleSuggestedQuestion(question)}
-                      className="w-full text-left text-xs bg-white border border-purple-200 rounded p-1 hover:bg-purple-100 transition-colors"
+                      className="w-full text-left text-xs bg-white border border-purple-200 rounded p-1.5 hover:bg-purple-100 transition-colors"
                     >
                       {question}
                     </button>
                   ))}
                 </div>
+              </motion.div>
+
+              <motion.div
+                className="bg-indigo-50 rounded p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <Camera className="text-indigo-600" size={12} />
+                  <h3 className="font-semibold text-indigo-800 text-xs">Aplikasi Praktis</h3>
+                </div>
+                <ul className="text-indigo-700 text-xs space-y-1">
+                  <li>• Bantuan untuk orang kurang upaya</li>
+                  <li>• Sistem keselamatan dan pengawasan</li>
+                  <li>• Analisis kandungan media sosial</li>
+                  <li>• Automasi kawalan kualiti</li>
+                  <li>• Diagnosis perubatan</li>
+                  <li>• Kenderaan autonomi</li>
+                </ul>
+              </motion.div>
+
+              <motion.div
+                className="bg-rose-50 rounded p-2"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="flex items-center space-x-1 mb-1">
+                  <Eye className="text-rose-600" size={12} />
+                  <h3 className="font-semibold text-rose-800 text-xs">Tips Penggunaan</h3>
+                </div>
+                <ul className="text-rose-700 text-xs space-y-1">
+                  <li>• Gunakan imej yang jelas dan terang</li>
+                  <li>• Pastikan objek utama kelihatan</li>
+                  <li>• Tanya soalan yang spesifik</li>
+                  <li>• Cuba pelbagai sudut pandangan</li>
+                  <li>• Elakkan imej yang kabur</li>
+                </ul>
               </motion.div>
             </div>
           </div>
