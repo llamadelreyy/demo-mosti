@@ -49,6 +49,7 @@ pydantic==2.5.0
 # Utilities
 python-dotenv==1.0.0
 loguru==0.7.2
+psutil==5.9.6
 
 # PDF generation
 reportlab==4.0.7

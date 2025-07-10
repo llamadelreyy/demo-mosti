@@ -2,7 +2,7 @@ import asyncio
 import os
 import logging
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,7 +16,7 @@ import io
 import base64
 import tempfile
 import aiofiles
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 import queue
 import time
@@ -28,33 +28,120 @@ from reportlab.lib.colors import Color
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from reportlab.lib.enums import TA_CENTER
+import gc
+import psutil
+import asyncio
+from asyncio import Semaphore
+import httpx
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Global variables for models
+# Global variables for models and pools
 whisper_model = None
 executor = None
-whisper_queue = None
-tts_queue = None
+whisper_workers = []
+tts_workers = []
+ollama_semaphore = None
+whisper_semaphore = None
+tts_semaphore = None
+
+# Performance monitoring
+request_stats = {
+    "llm_requests": 0,
+    "vlm_requests": 0,
+    "whisper_requests": 0,
+    "tts_requests": 0,
+    "active_requests": 0,
+    "failed_requests": 0
+}
 
 # GPU allocation
 GPU_0 = "cuda:0"  # For LLM (Ollama Llama3.2:1b) and VLM (LLaVA)
 GPU_1 = "cuda:1"  # For Whisper and TTS
 
-class GPUManager:
-    def __init__(self):
-        self.gpu_0_lock = threading.Lock()
-        self.gpu_1_lock = threading.Lock()
-        
-    def get_gpu_0_lock(self):
-        return self.gpu_0_lock
-        
-    def get_gpu_1_lock(self):
-        return self.gpu_1_lock
+# Configuration for high performance
+CONFIG = {
+    "max_workers": 50,  # Increased thread pool
+    "whisper_workers": 8,  # Multiple Whisper workers
+    "tts_workers": 8,  # Multiple TTS workers
+    "ollama_max_concurrent": 10,  # Max concurrent Ollama requests
+    "whisper_max_concurrent": 8,  # Max concurrent Whisper requests
+    "tts_max_concurrent": 8,  # Max concurrent TTS requests
+    "request_timeout": 15,  # Reduced timeout
+    "queue_maxsize": 500,  # Larger queues
+    "gpu_memory_fraction": 0.8,  # GPU memory management
+}
 
-gpu_manager = GPUManager()
+class PerformanceMonitor:
+    def __init__(self):
+        self.active_requests = 0
+        self.request_times = []
+        self.lock = threading.Lock()
+    
+    def start_request(self):
+        with self.lock:
+            self.active_requests += 1
+            request_stats["active_requests"] = self.active_requests
+    
+    def end_request(self, duration: float, success: bool = True):
+        with self.lock:
+            self.active_requests -= 1
+            request_stats["active_requests"] = self.active_requests
+            self.request_times.append(duration)
+            if not success:
+                request_stats["failed_requests"] += 1
+            
+            # Keep only last 100 request times
+            if len(self.request_times) > 100:
+                self.request_times = self.request_times[-100:]
+    
+    def get_stats(self):
+        with self.lock:
+            avg_time = sum(self.request_times) / len(self.request_times) if self.request_times else 0
+            return {
+                "active_requests": self.active_requests,
+                "average_response_time": avg_time,
+                "total_requests": len(self.request_times),
+                "memory_usage": psutil.virtual_memory().percent,
+                "gpu_memory": self._get_gpu_memory()
+            }
+    
+    def _get_gpu_memory(self):
+        try:
+            if torch.cuda.is_available():
+                return {
+                    f"gpu_{i}": {
+                        "allocated": torch.cuda.memory_allocated(i) / 1024**3,
+                        "cached": torch.cuda.memory_reserved(i) / 1024**3
+                    }
+                    for i in range(torch.cuda.device_count())
+                }
+        except:
+            pass
+        return {}
+
+monitor = PerformanceMonitor()
+
+class OptimizedGPUManager:
+    def __init__(self):
+        self.gpu_0_semaphore = Semaphore(CONFIG["ollama_max_concurrent"])
+        self.gpu_1_semaphore = Semaphore(max(CONFIG["whisper_max_concurrent"], CONFIG["tts_max_concurrent"]))
+        
+    async def acquire_gpu_0(self):
+        await self.gpu_0_semaphore.acquire()
+        
+    def release_gpu_0(self):
+        self.gpu_0_semaphore.release()
+        
+    async def acquire_gpu_1(self):
+        await self.gpu_1_semaphore.acquire()
+        
+    def release_gpu_1(self):
+        self.gpu_1_semaphore.release()
+
+gpu_manager = OptimizedGPUManager()
 
 # Request/Response Models
 class LLMRequest(BaseModel):
@@ -94,49 +181,48 @@ class CertificateRequest(BaseModel):
     date: str
     certificate_id: str
 
-# Initialize models
+# Optimized model initialization
 async def init_whisper_model():
-    """Initialize Whisper model on GPU 1"""
+    """Initialize Whisper model on GPU 1 with optimization"""
     global whisper_model
     try:
-        with gpu_manager.get_gpu_1_lock():
-            # Check available GPUs and use appropriate device
-            if torch.cuda.is_available():
-                gpu_count = torch.cuda.device_count()
-                logger.info(f"PyTorch detects {gpu_count} GPU(s)")
-                
-                if gpu_count > 1:
-                    device = "cuda:1"
-                    logger.info("Loading Whisper model on GPU 1...")
-                    # Set GPU 1 for this process
-                    torch.cuda.set_device(1)
-                else:
-                    device = "cuda:0"
-                    logger.info("Only 1 GPU detected by PyTorch, loading Whisper model on GPU 0...")
-                    torch.cuda.set_device(0)
+        if torch.cuda.is_available():
+            gpu_count = torch.cuda.device_count()
+            logger.info(f"PyTorch detects {gpu_count} GPU(s)")
+            
+            if gpu_count > 1:
+                device = "cuda:1"
+                logger.info("Loading Whisper model on GPU 1...")
+                torch.cuda.set_device(1)
             else:
-                device = "cpu"
-                logger.info("CUDA not available, loading Whisper model on CPU...")
+                device = "cuda:0"
+                logger.info("Only 1 GPU detected, loading Whisper model on GPU 0...")
+                torch.cuda.set_device(0)
+        else:
+            device = "cpu"
+            logger.info("CUDA not available, loading Whisper model on CPU...")
+        
+        # Load model with optimization
+        whisper_model = whisper.load_model("base", device=device)
+        
+        # Optimize for inference
+        if device.startswith("cuda"):
+            # Keep full precision to avoid type mismatch errors
+            torch.cuda.empty_cache()  # Clear cache
             
-            whisper_model = whisper.load_model("base", device=device)
-            logger.info(f"Whisper model loaded successfully on {device}")
-            
-            # Verify model is loaded and on correct device
-            logger.info("Whisper model initialization complete")
-            if hasattr(whisper_model, 'device'):
-                logger.info(f"Whisper model device: {whisper_model.device}")
-            
+        logger.info(f"Whisper model loaded and optimized on {device}")
+        
     except Exception as e:
         logger.error(f"Failed to load Whisper model: {e}")
         whisper_model = None
         raise
 
 async def init_tts_model():
-    """Initialize gTTS (Google Text-to-Speech)"""
+    """Initialize gTTS with connection pooling"""
     try:
-        logger.info("Initializing gTTS (Google Text-to-Speech)...")
+        logger.info("Initializing gTTS with connection pooling...")
         
-        # Test gTTS functionality
+        # Test gTTS functionality with timeout
         try:
             test_tts = gTTS(text="Test", lang='en', slow=False)
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=True) as test_file:
@@ -152,214 +238,265 @@ async def init_tts_model():
         raise
 
 async def init_ollama():
-    """Initialize Ollama models on GPU 0"""
+    """Initialize Ollama with connection optimization"""
     try:
-        logger.info("Initializing Ollama models on GPU 0...")
+        logger.info("Initializing Ollama with connection optimization...")
         
-        # Pull models if not exists
+        # Test Ollama connection
         try:
-            await asyncio.to_thread(ollama.pull, "llama3.2:1b")
-            logger.info("Llama3.2:1b model ready")
+            models = await asyncio.to_thread(ollama.list)
+            logger.info(f"Ollama connected, available models: {len(models.get('models', []))}")
         except Exception as e:
-            logger.warning(f"Could not pull llama3.2:1b: {e}")
+            logger.warning(f"Ollama connection test failed: {e}")
             
-        try:
-            await asyncio.to_thread(ollama.pull, "llava")
-            logger.info("LLaVA model ready")
-        except Exception as e:
-            logger.warning(f"Could not pull llava: {e}")
-            
-        logger.info("Ollama models initialized successfully")
+        logger.info("Ollama initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize Ollama: {e}")
         raise
 
-# Worker functions for concurrent processing
-def whisper_worker():
-    """Worker function for Whisper processing"""
-    global whisper_queue
-    while True:
-        try:
-            task = whisper_queue.get(timeout=1)
-            if task is None:
-                break
+# Optimized worker functions
+class WhisperWorker:
+    def __init__(self, worker_id: int):
+        self.worker_id = worker_id
+        self.queue = asyncio.Queue(maxsize=CONFIG["queue_maxsize"])
+        self.running = True
+        
+    async def start(self):
+        """Start the worker"""
+        while self.running:
+            try:
+                task = await asyncio.wait_for(self.queue.get(), timeout=1.0)
+                if task is None:
+                    break
+                    
+                audio_file, result_future = task
                 
-            audio_file, result_queue = task
-            
-            with gpu_manager.get_gpu_1_lock():
+                await gpu_manager.acquire_gpu_1()
                 try:
-                    logger.info(f"Processing audio file: {audio_file}")
+                    start_time = time.time()
+                    logger.info(f"Worker {self.worker_id} processing audio: {audio_file}")
+                    
                     if whisper_model is None:
                         raise Exception("Whisper model not loaded")
                     
-                    result = whisper_model.transcribe(audio_file)
-                    logger.info(f"Transcription successful: {result.get('text', '')[:50]}...")
-                    result_queue.put({
-                        "text": result["text"],
-                        "duration": result.get("duration", 0),
-                        "success": True
-                    })
+                    # Process in thread to avoid blocking
+                    result = await asyncio.to_thread(whisper_model.transcribe, audio_file)
+                    
+                    duration = time.time() - start_time
+                    logger.info(f"Worker {self.worker_id} completed in {duration:.2f}s")
+                    
+                    if not result_future.cancelled():
+                        result_future.set_result({
+                            "text": result["text"],
+                            "duration": result.get("duration", 0),
+                            "success": True
+                        })
+                        
                 except Exception as e:
-                    logger.error(f"Whisper transcription error: {str(e)}")
-                    result_queue.put({
-                        "error": str(e),
-                        "success": False
-                    })
+                    logger.error(f"Worker {self.worker_id} error: {str(e)}")
+                    if not result_future.cancelled():
+                        result_future.set_result({
+                            "error": str(e),
+                            "success": False
+                        })
+                finally:
+                    gpu_manager.release_gpu_1()
+                    self.queue.task_done()
                     
-            whisper_queue.task_done()
-        except queue.Empty:
-            continue
-        except Exception as e:
-            logger.error(f"Whisper worker error: {e}")
-
-def tts_worker():
-    """Worker function for TTS processing using gTTS"""
-    global tts_queue
-    while True:
-        try:
-            task = tts_queue.get(timeout=1)
-            if task is None:
-                break
-                
-            text, voice, speed, result_queue = task
-            
-            try:
-                logger.info(f"gTTS processing text: {text[:50]}...")
-                
-                # Detect language for better TTS quality
-                detected_lang = detect_language(text)
-                
-                # Map voice selection to language and TLD for gTTS
-                voice_config = {
-                    'female': {'lang': 'en', 'tld': 'com'},      # English US female-like
-                    'male': {'lang': 'en', 'tld': 'co.uk'},     # English UK male-like
-                    'female_us': {'lang': 'en', 'tld': 'com'},  # English US
-                    'male_us': {'lang': 'en', 'tld': 'us'},     # English US alternative
-                    'default': {'lang': 'en', 'tld': 'com'}     # Default
-                }
-                
-                # Use detected language if Malay
-                if detected_lang == "malay":
-                    lang = 'ms'  # Malay language code
-                    tld = 'com'
-                else:
-                    config = voice_config.get(voice, voice_config['default'])
-                    lang = config['lang']
-                    tld = config['tld']
-                
-                # Adjust speed (gTTS has slow parameter)
-                slow = speed < 0.8  # Use slow speech if speed is less than 0.8
-                
-                # Generate audio using gTTS
-                tts = gTTS(text=text, lang=lang, slow=slow, tld=tld)
-                
-                # Save to temporary file and read as bytes
-                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
-                    tts.save(tmp_file.name)
-                    
-                    # Read the generated audio file
-                    with open(tmp_file.name, "rb") as f:
-                        audio_data = f.read()
-                    
-                    # Clean up temporary file
-                    os.unlink(tmp_file.name)
-                    
-                    if len(audio_data) == 0:
-                        raise Exception("gTTS generated empty audio")
-                    
-                    # Encode to base64 for transmission
-                    audio_base64 = base64.b64encode(audio_data).decode()
-                    logger.info(f"gTTS audio generated with lang='{lang}', tld='{tld}', slow={slow}, size: {len(audio_data)} bytes")
-                
-                result_queue.put({
-                    "audio_base64": audio_base64,
-                    "success": True
-                })
-                logger.info("gTTS processing completed successfully")
-                    
+            except asyncio.TimeoutError:
+                continue
             except Exception as e:
-                logger.error(f"gTTS processing error: {str(e)}")
-                result_queue.put({
-                    "error": str(e),
-                    "success": False
-                })
+                logger.error(f"Whisper worker {self.worker_id} error: {e}")
+    
+    async def add_task(self, audio_file: str) -> Dict[str, Any]:
+        """Add task to worker queue"""
+        result_future = asyncio.Future()
+        await self.queue.put((audio_file, result_future))
+        return await asyncio.wait_for(result_future, timeout=CONFIG["request_timeout"])
+
+class TTSWorker:
+    def __init__(self, worker_id: int):
+        self.worker_id = worker_id
+        self.queue = asyncio.Queue(maxsize=CONFIG["queue_maxsize"])
+        self.running = True
+        
+    async def start(self):
+        """Start the worker"""
+        while self.running:
+            try:
+                task = await asyncio.wait_for(self.queue.get(), timeout=1.0)
+                if task is None:
+                    break
                     
-            tts_queue.task_done()
-        except queue.Empty:
-            continue
-        except Exception as e:
-            logger.error(f"gTTS worker error: {e}")
+                text, voice, speed, result_future = task
+                
+                try:
+                    start_time = time.time()
+                    logger.info(f"TTS Worker {self.worker_id} processing: {text[:50]}...")
+                    
+                    # Detect language for better TTS quality
+                    detected_lang = detect_language(text)
+                    
+                    # Map voice selection to language and TLD for gTTS
+                    voice_config = {
+                        'female': {'lang': 'en', 'tld': 'com'},
+                        'male': {'lang': 'en', 'tld': 'co.uk'},
+                        'female_us': {'lang': 'en', 'tld': 'com'},
+                        'male_us': {'lang': 'en', 'tld': 'us'},
+                        'default': {'lang': 'en', 'tld': 'com'}
+                    }
+                    
+                    if detected_lang == "malay":
+                        lang = 'ms'
+                        tld = 'com'
+                    else:
+                        config = voice_config.get(voice, voice_config['default'])
+                        lang = config['lang']
+                        tld = config['tld']
+                    
+                    slow = speed < 0.8
+                    
+                    # Generate audio using gTTS in thread
+                    tts = gTTS(text=text, lang=lang, slow=slow, tld=tld)
+                    
+                    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
+                        await asyncio.to_thread(tts.save, tmp_file.name)
+                        
+                        async with aiofiles.open(tmp_file.name, "rb") as f:
+                            audio_data = await f.read()
+                        
+                        os.unlink(tmp_file.name)
+                        
+                        if len(audio_data) == 0:
+                            raise Exception("gTTS generated empty audio")
+                        
+                        audio_base64 = base64.b64encode(audio_data).decode()
+                        duration = time.time() - start_time
+                        
+                        logger.info(f"TTS Worker {self.worker_id} completed in {duration:.2f}s")
+                    
+                    if not result_future.cancelled():
+                        result_future.set_result({
+                            "audio_base64": audio_base64,
+                            "success": True
+                        })
+                        
+                except Exception as e:
+                    logger.error(f"TTS Worker {self.worker_id} error: {str(e)}")
+                    if not result_future.cancelled():
+                        result_future.set_result({
+                            "error": str(e),
+                            "success": False
+                        })
+                finally:
+                    self.queue.task_done()
+                    
+            except asyncio.TimeoutError:
+                continue
+            except Exception as e:
+                logger.error(f"TTS worker {self.worker_id} error: {e}")
+    
+    async def add_task(self, text: str, voice: str, speed: float) -> Dict[str, Any]:
+        """Add task to worker queue"""
+        result_future = asyncio.Future()
+        await self.queue.put((text, voice, speed, result_future))
+        return await asyncio.wait_for(result_future, timeout=CONFIG["request_timeout"])
+
+# Worker pools
+whisper_worker_pool = []
+tts_worker_pool = []
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager"""
-    global executor, whisper_queue, tts_queue
+    """Application lifespan manager with optimizations"""
+    global executor, whisper_worker_pool, tts_worker_pool
     
-    logger.info("Starting AI Demo Backend...")
+    logger.info("Starting Optimized AI Demo Backend...")
     
-    # Initialize thread pool executor
-    executor = ThreadPoolExecutor(max_workers=20)
-    
-    # Initialize queues
-    whisper_queue = queue.Queue(maxsize=100)
-    tts_queue = queue.Queue(maxsize=100)
+    # Initialize thread pool executor with more workers
+    executor = ThreadPoolExecutor(max_workers=CONFIG["max_workers"])
     
     # Initialize models
     await init_ollama()
     await init_whisper_model()
     await init_tts_model()
     
-    # Start worker threads
-    whisper_thread = threading.Thread(target=whisper_worker, daemon=True)
-    tts_thread = threading.Thread(target=tts_worker, daemon=True)
+    # Create worker pools
+    logger.info(f"Creating {CONFIG['whisper_workers']} Whisper workers...")
+    for i in range(CONFIG["whisper_workers"]):
+        worker = WhisperWorker(i)
+        whisper_worker_pool.append(worker)
+        asyncio.create_task(worker.start())
     
-    whisper_thread.start()
-    tts_thread.start()
+    logger.info(f"Creating {CONFIG['tts_workers']} TTS workers...")
+    for i in range(CONFIG["tts_workers"]):
+        worker = TTSWorker(i)
+        tts_worker_pool.append(worker)
+        asyncio.create_task(worker.start())
     
-    logger.info("All models loaded and workers started successfully!")
+    # GPU memory optimization
+    if torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()):
+            torch.cuda.empty_cache()
+            torch.cuda.set_per_process_memory_fraction(CONFIG["gpu_memory_fraction"], device=i)
+    
+    logger.info("All optimized models loaded and workers started successfully!")
     
     yield
     
     # Cleanup
-    logger.info("Shutting down...")
-    whisper_queue.put(None)
-    tts_queue.put(None)
+    logger.info("Shutting down optimized backend...")
+    
+    # Stop workers
+    for worker in whisper_worker_pool:
+        worker.running = False
+        await worker.queue.put(None)
+    
+    for worker in tts_worker_pool:
+        worker.running = False
+        await worker.queue.put(None)
+    
     executor.shutdown(wait=True)
+    
+    # Clear GPU memory
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 # Create FastAPI app
 app = FastAPI(
-    title="AI Demo Backend",
-    description="Backend API for AI Demo with LLM, VLM, Whisper, and TTS",
-    version="1.0.0",
+    title="Optimized AI Demo Backend",
+    description="High-performance backend API for AI Demo with LLM, VLM, Whisper, and TTS",
+    version="2.0.0",
     lifespan=lifespan
 )
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Health check endpoint
+# Health check endpoint with performance stats
 @app.get("/health")
 async def health_check():
+    stats = monitor.get_stats()
     return {
         "status": "healthy",
         "timestamp": datetime.now(),
         "gpu_available": torch.cuda.is_available(),
-        "gpu_count": torch.cuda.device_count() if torch.cuda.is_available() else 0
+        "gpu_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
+        "performance": stats,
+        "config": CONFIG
     }
 
 def generate_certificate_pdf(name: str, date: str, certificate_id: str) -> bytes:
     """Generate a PDF certificate using ReportLab"""
     try:
-        # Create a BytesIO buffer to store the PDF
         buffer = io.BytesIO()
         
-        # Create the PDF document
         doc = SimpleDocTemplate(
             buffer,
             pagesize=A4,
@@ -369,13 +506,11 @@ def generate_certificate_pdf(name: str, date: str, certificate_id: str) -> bytes
             bottomMargin=20*mm
         )
         
-        # Get styles
         styles = getSampleStyleSheet()
         
-        # Create custom styles
         title_style = styles['Title']
         title_style.fontSize = 28
-        title_style.textColor = Color(0.6, 0.4, 0.2)  # Amber color
+        title_style.textColor = Color(0.6, 0.4, 0.2)
         title_style.alignment = TA_CENTER
         
         heading_style = styles['Heading1']
@@ -393,10 +528,8 @@ def generate_certificate_pdf(name: str, date: str, certificate_id: str) -> bytes
         name_style.textColor = Color(0.6, 0.4, 0.2)
         name_style.alignment = TA_CENTER
         
-        # Build the content
         content = []
         
-        # Add logo if it exists
         logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
         if os.path.exists(logo_path):
             try:
@@ -410,42 +543,27 @@ def generate_certificate_pdf(name: str, date: str, certificate_id: str) -> bytes
         else:
             content.append(Spacer(1, 30*mm))
         
-        # Title
         content.append(Paragraph("SIJIL PENCAPAIAN", title_style))
         content.append(Spacer(1, 20*mm))
-        
-        # Certificate text
         content.append(Paragraph("Dengan ini disahkan bahawa", normal_style))
         content.append(Spacer(1, 15*mm))
-        
-        # Name
         content.append(Paragraph(name, name_style))
         content.append(Spacer(1, 15*mm))
-        
-        # Achievement text
         content.append(Paragraph("telah diiktiraf sebagai", normal_style))
         content.append(Spacer(1, 10*mm))
-        
-        # Certification title
         content.append(Paragraph("Certified Gen-AI Learner", heading_style))
         content.append(Spacer(1, 15*mm))
         
-        # Description
         description = """dan telah menunjukkan pemahaman yang baik tentang teknologi AI termasuk
         Large Language Models (LLM), Vision Language Models (VLM),
         Speech-to-Text (Whisper), dan Text-to-Speech (TTS)"""
         content.append(Paragraph(description, normal_style))
         content.append(Spacer(1, 20*mm))
-        
-        # Date and ID
         content.append(Paragraph(f"Tarikh: {date}", normal_style))
         content.append(Spacer(1, 5*mm))
         content.append(Paragraph(f"ID Sijil: {certificate_id}", normal_style))
         
-        # Build the PDF
         doc.build(content)
-        
-        # Get the PDF data
         pdf_data = buffer.getvalue()
         buffer.close()
         
@@ -471,52 +589,74 @@ def detect_language(text: str) -> str:
     elif english_count > malay_count:
         return "english"
     else:
-        # Default to English if unclear
         return "english"
 
-# LLM endpoint
+# Optimized LLM endpoint
 @app.post("/api/llm", response_model=LLMResponse)
 async def llm_chat(request: LLMRequest):
-    """Chat with LLM using Ollama Llama3.2:1b on GPU 0"""
+    """Chat with LLM using Ollama Llama3.2:1b on GPU 0 - Optimized"""
+    start_time = time.time()
+    monitor.start_request()
+    request_stats["llm_requests"] += 1
+    
     try:
-        with gpu_manager.get_gpu_0_lock():
-            # Detect input language
+        await gpu_manager.acquire_gpu_0()
+        try:
             detected_lang = detect_language(request.message)
             
-            # Prepare prompt based on detected language
             if detected_lang == "malay":
                 prompt = f"Jawab dalam Bahasa Malaysia: {request.message}"
             else:
                 prompt = f"Please respond in English: {request.message}"
             
-            # Use Ollama for LLM
-            response = await asyncio.to_thread(
-                ollama.chat,
-                model="llama3.2:1b",
-                messages=[{
-                    "role": "user",
-                    "content": prompt
-                }]
+            # Use asyncio.to_thread for better concurrency
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    ollama.chat,
+                    model="llama3.2:1b",
+                    messages=[{
+                        "role": "user",
+                        "content": prompt
+                    }]
+                ),
+                timeout=CONFIG["request_timeout"]
             )
+            
+            duration = time.time() - start_time
+            monitor.end_request(duration, True)
             
             return LLMResponse(
                 response=response["message"]["content"],
                 timestamp=datetime.now()
             )
+            
+        finally:
+            gpu_manager.release_gpu_0()
+            
+    except asyncio.TimeoutError:
+        duration = time.time() - start_time
+        monitor.end_request(duration, False)
+        logger.error("LLM request timeout")
+        raise HTTPException(status_code=408, detail="LLM request timeout")
     except Exception as e:
+        duration = time.time() - start_time
+        monitor.end_request(duration, False)
         logger.error(f"LLM error: {e}")
         raise HTTPException(status_code=500, detail=f"LLM processing failed: {str(e)}")
 
-# VLM endpoint
+# Optimized VLM endpoint
 @app.post("/api/vlm", response_model=VLMResponse)
 async def vlm_analyze(request: VLMRequest):
-    """Analyze image with VLM using Ollama LLaVA on GPU 0"""
+    """Analyze image with VLM using Ollama LLaVA on GPU 0 - Optimized"""
+    start_time = time.time()
+    monitor.start_request()
+    request_stats["vlm_requests"] += 1
+    
     try:
-        with gpu_manager.get_gpu_0_lock():
-            # Detect input language
+        await gpu_manager.acquire_gpu_0()
+        try:
             detected_lang = detect_language(request.prompt)
             
-            # Prepare prompt based on detected language
             if detected_lang == "malay":
                 prompt = f"Jawab dalam Bahasa Malaysia: {request.prompt}"
             else:
@@ -530,31 +670,52 @@ async def vlm_analyze(request: VLMRequest):
                 tmp_file.write(image_data)
                 tmp_file.flush()
                 
-                # Use Ollama LLaVA for VLM
-                response = await asyncio.to_thread(
-                    ollama.chat,
-                    model="llava",
-                    messages=[{
-                        "role": "user",
-                        "content": prompt,
-                        "images": [tmp_file.name]
-                    }]
+                # Use asyncio.to_thread for better concurrency
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        ollama.chat,
+                        model="llava",
+                        messages=[{
+                            "role": "user",
+                            "content": prompt,
+                            "images": [tmp_file.name]
+                        }]
+                    ),
+                    timeout=CONFIG["request_timeout"]
                 )
                 
                 os.unlink(tmp_file.name)
+                
+                duration = time.time() - start_time
+                monitor.end_request(duration, True)
                 
                 return VLMResponse(
                     response=response["message"]["content"],
                     timestamp=datetime.now()
                 )
+                
+        finally:
+            gpu_manager.release_gpu_0()
+            
+    except asyncio.TimeoutError:
+        duration = time.time() - start_time
+        monitor.end_request(duration, False)
+        logger.error("VLM request timeout")
+        raise HTTPException(status_code=408, detail="VLM request timeout")
     except Exception as e:
+        duration = time.time() - start_time
+        monitor.end_request(duration, False)
         logger.error(f"VLM error: {e}")
         raise HTTPException(status_code=500, detail=f"VLM processing failed: {str(e)}")
 
-# Whisper endpoint
+# Optimized Whisper endpoint with load balancing
 @app.post("/api/whisper", response_model=WhisperResponse)
 async def whisper_transcribe(audio: UploadFile = File(...)):
-    """Transcribe audio using Whisper on GPU 1"""
+    """Transcribe audio using Whisper with load balancing"""
+    start_time = time.time()
+    monitor.start_request()
+    request_stats["whisper_requests"] += 1
+    
     try:
         # Save uploaded audio to temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
@@ -562,18 +723,17 @@ async def whisper_transcribe(audio: UploadFile = File(...)):
             tmp_file.write(content)
             tmp_file.flush()
             
-            # Create result queue
-            result_queue = queue.Queue()
+            # Find worker with smallest queue
+            best_worker = min(whisper_worker_pool, key=lambda w: w.queue.qsize())
             
-            # Add task to whisper queue
-            whisper_queue.put((tmp_file.name, result_queue))
-            
-            # Wait for result with timeout
             try:
-                result = result_queue.get(timeout=30)
+                result = await best_worker.add_task(tmp_file.name)
                 os.unlink(tmp_file.name)
                 
                 if result["success"]:
+                    duration = time.time() - start_time
+                    monitor.end_request(duration, True)
+                    
                     return WhisperResponse(
                         text=result["text"],
                         duration=result["duration"],
@@ -582,30 +742,37 @@ async def whisper_transcribe(audio: UploadFile = File(...)):
                 else:
                     raise HTTPException(status_code=500, detail=result["error"])
                     
-            except queue.Empty:
+            except asyncio.TimeoutError:
                 os.unlink(tmp_file.name)
+                duration = time.time() - start_time
+                monitor.end_request(duration, False)
                 raise HTTPException(status_code=408, detail="Whisper processing timeout")
                 
     except Exception as e:
+        duration = time.time() - start_time
+        monitor.end_request(duration, False)
         logger.error(f"Whisper error: {e}")
         raise HTTPException(status_code=500, detail=f"Whisper processing failed: {str(e)}")
 
-# TTS endpoint
+# Optimized TTS endpoint with load balancing
 @app.post("/api/tts", response_model=TTSResponse)
 async def tts_generate(request: TTSRequest):
-    """Generate speech using TTS on GPU 1"""
+    """Generate speech using TTS with load balancing"""
+    start_time = time.time()
+    monitor.start_request()
+    request_stats["tts_requests"] += 1
+    
     try:
-        # Create result queue
-        result_queue = queue.Queue()
+        # Find worker with smallest queue
+        best_worker = min(tts_worker_pool, key=lambda w: w.queue.qsize())
         
-        # Add task to TTS queue
-        tts_queue.put((request.text, request.voice, request.speed, result_queue))
-        
-        # Wait for result with timeout
         try:
-            result = result_queue.get(timeout=30)
+            result = await best_worker.add_task(request.text, request.voice, request.speed)
             
             if result["success"]:
+                duration = time.time() - start_time
+                monitor.end_request(duration, True)
+                
                 return TTSResponse(
                     audio_base64=result["audio_base64"],
                     timestamp=datetime.now()
@@ -613,10 +780,14 @@ async def tts_generate(request: TTSRequest):
             else:
                 raise HTTPException(status_code=500, detail=result["error"])
                 
-        except queue.Empty:
+        except asyncio.TimeoutError:
+            duration = time.time() - start_time
+            monitor.end_request(duration, False)
             raise HTTPException(status_code=408, detail="TTS processing timeout")
             
     except Exception as e:
+        duration = time.time() - start_time
+        monitor.end_request(duration, False)
         logger.error(f"TTS error: {e}")
         raise HTTPException(status_code=500, detail=f"TTS processing failed: {str(e)}")
 
@@ -658,16 +829,36 @@ async def get_tts_voices():
         "default": "female"
     }
 
-# Status endpoint
+# Enhanced status endpoint with performance metrics
 @app.get("/api/status")
 async def get_status():
-    """Get system status"""
+    """Get system status with performance metrics"""
+    stats = monitor.get_stats()
     return {
-        "whisper_queue_size": whisper_queue.qsize() if whisper_queue else 0,
-        "tts_queue_size": tts_queue.qsize() if tts_queue else 0,
+        "whisper_workers": len(whisper_worker_pool),
+        "tts_workers": len(tts_worker_pool),
+        "whisper_queue_sizes": [w.queue.qsize() for w in whisper_worker_pool],
+        "tts_queue_sizes": [w.queue.qsize() for w in tts_worker_pool],
         "gpu_0_available": torch.cuda.is_available(),
         "gpu_1_available": torch.cuda.is_available() and torch.cuda.device_count() > 1,
+        "performance": stats,
+        "request_stats": request_stats,
         "timestamp": datetime.now()
+    }
+
+# Performance monitoring endpoint
+@app.get("/api/performance")
+async def get_performance():
+    """Get detailed performance metrics"""
+    return {
+        "stats": monitor.get_stats(),
+        "request_stats": request_stats,
+        "config": CONFIG,
+        "system": {
+            "cpu_percent": psutil.cpu_percent(),
+            "memory_percent": psutil.virtual_memory().percent,
+            "disk_usage": psutil.disk_usage('/').percent
+        }
     }
 
 # Certificate PDF endpoint
@@ -677,8 +868,9 @@ async def generate_certificate_pdf_endpoint(name: str, date: str, certificate_id
     try:
         logger.info(f"Generating PDF certificate for: {name}")
         
-        # Generate the PDF
-        pdf_data = generate_certificate_pdf(
+        # Generate the PDF in thread pool to avoid blocking
+        pdf_data = await asyncio.to_thread(
+            generate_certificate_pdf,
             name=name,
             date=date,
             certificate_id=certificate_id
@@ -710,6 +902,8 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8002,
         reload=False,
-        workers=1,
-        log_level="info"
+        workers=1,  # Keep single worker for GPU management
+        log_level="info",
+        access_log=False,  # Disable access logs for performance
+        loop="asyncio"
     )
