@@ -8,16 +8,16 @@ const Navigation = () => {
   const location = useLocation();
   
   const routes = [
-    { path: '/welcome', name: 'Selamat Datang' },
+    { path: '/', name: 'Selamat Datang' },
     { path: '/info', name: 'Maklumat' },
-    { path: '/name-input', name: 'Nama' },
-    { path: '/llm-demo', name: 'LLM' },
-    { path: '/vlm-demo', name: 'VLM' },
-    { path: '/whisper-demo', name: 'Whisper' },
-    { path: '/tts-demo', name: 'TTS' },
-    { path: '/quiz', name: 'Kuiz' },
-    { path: '/results', name: 'Keputusan' },
-    { path: '/certificate', name: 'Sijil' }
+    { path: '/nama', name: 'Nama' },
+    { path: '/llm', name: 'LLM' },
+    { path: '/vlm', name: 'VLM' },
+    { path: '/whisper', name: 'Whisper' },
+    { path: '/tts', name: 'TTS' },
+    { path: '/kuiz', name: 'Kuiz' },
+    { path: '/keputusan', name: 'Keputusan' },
+    { path: '/sijil', name: 'Sijil' }
   ];
   
   const currentIndex = routes.findIndex(route => route.path === location.pathname);
@@ -37,7 +37,7 @@ const Navigation = () => {
   };
   
   const handleHome = () => {
-    navigate('/welcome');
+    navigate('/');
   };
   
   return (

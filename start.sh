@@ -149,23 +149,47 @@ if ! port_in_use 11434; then
     echo "  Starting Ollama service with keep-alive forever..."
     OLLAMA_KEEP_ALIVE=-1 ollama serve &
     OLLAMA_PID=$!
-    sleep 10
+    echo "  Waiting for Ollama to initialize..."
+    sleep 15
+    
+    # Wait for Ollama to be ready
+    for i in {1..30}; do
+        if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+            echo "  ✅ Ollama service ready"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            echo "  ⚠️  Ollama taking longer than expected to start"
+        fi
+        sleep 1
+    done
 else
     echo "  ✅ Ollama service already running"
 fi
 
 # Pull required models
 echo "  Checking AI models..."
-if ! ollama list | grep -q "llama3.2:1b"; then
+
+# Check and pull llama3.2:1b
+if ! ollama list 2>/dev/null | grep -q "llama3.2:1b"; then
     echo "  Downloading Llama3.2:1b (SLM) model..."
-    ollama pull llama3.2:1b
+    if ollama pull llama3.2:1b; then
+        echo "  ✅ Llama3.2:1b model downloaded successfully"
+    else
+        echo "  ⚠️  Failed to download Llama3.2:1b model. Will retry when needed."
+    fi
 else
     echo "  ✅ Llama3.2:1b model ready"
 fi
 
-if ! ollama list | grep -q "llava"; then
+# Check and pull llava
+if ! ollama list 2>/dev/null | grep -q "llava"; then
     echo "  Downloading LLaVA model..."
-    ollama pull llava
+    if ollama pull llava; then
+        echo "  ✅ LLaVA model downloaded successfully"
+    else
+        echo "  ⚠️  Failed to download LLaVA model. Will retry when needed."
+    fi
 else
     echo "  ✅ LLaVA model ready"
 fi
